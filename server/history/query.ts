@@ -27,6 +27,7 @@ function rowToEntry(row: EntryRow): HistoryEntry {
     label: row.label,
     meta: row.meta ? (JSON.parse(row.meta) as Record<string, unknown>) : null,
     preview: row.preview,
+    contentSha: row.blob_sha,
   }
 }
 

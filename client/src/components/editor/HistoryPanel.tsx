@@ -49,6 +49,34 @@ export function HistoryPanel({ slug, currentContent, open, onOpenChange, onRever
   const [contentLoading, setContentLoading] = useState(false)
   const [reverting, setReverting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentShas, setCurrentShas] = useState<{ sha256: string; gitBlob: string } | null>(
+    null,
+  )
+
+  // Hash the editor buffer so we can hide timeline rows whose content is
+  // identical to it (those would diff as just "N unchanged lines"). Clear
+  // the prior hashes while the new ones are being computed so we don't
+  // filter fresh buffer content against stale hashes during the async window.
+  useEffect(() => {
+    let cancelled = false
+    setCurrentShas(null)
+    void Promise.all([sha256OfText(currentContent), gitBlobSha1OfText(currentContent)]).then(
+      ([sha256, gitBlob]) => {
+        if (!cancelled) setCurrentShas({ sha256, gitBlob })
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [currentContent])
+
+  const visibleItems = useMemo(() => {
+    if (!currentShas) return items
+    return items.filter((item) => {
+      if (item.kind === "history") return item.entry.contentSha !== currentShas.sha256
+      return item.contentSha !== currentShas.gitBlob
+    })
+  }, [items, currentShas])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -56,15 +84,6 @@ export function HistoryPanel({ slug, currentContent, open, onOpenChange, onRever
     try {
       const next = await historyApi.timeline(slug)
       setItems(next)
-      // default selection: most recent entry (top of list) if nothing selected
-      setSelection((prev) => {
-        if (prev) return prev
-        const first = next[0]
-        if (!first) return null
-        return first.kind === "history"
-          ? { kind: "history", entry: first.entry }
-          : { kind: "git", item: first }
-      })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -79,6 +98,29 @@ export function HistoryPanel({ slug, currentContent, open, onOpenChange, onRever
     setPastContent(null)
     void refresh()
   }, [open, slug, refresh])
+
+  // Default selection tracks the most recent visible item. Re-runs when the
+  // editor buffer changes (e.g. after a revert) so a now-hidden selection
+  // advances to the next visible row.
+  useEffect(() => {
+    if (loading || !currentShas) return
+    if (selection) {
+      const selSha =
+        selection.kind === "history" ? selection.entry.contentSha : selection.item.contentSha
+      const cmp = selection.kind === "history" ? currentShas.sha256 : currentShas.gitBlob
+      if (selSha !== cmp) return
+    }
+    const first = visibleItems[0]
+    if (!first) {
+      if (selection) setSelection(null)
+      return
+    }
+    setSelection(
+      first.kind === "history"
+        ? { kind: "history", entry: first.entry }
+        : { kind: "git", item: first },
+    )
+  }, [visibleItems, currentShas, selection, loading])
 
   // Fetch content for the current selection
   useEffect(() => {
@@ -108,7 +150,7 @@ export function HistoryPanel({ slug, currentContent, open, onOpenChange, onRever
     }
   }, [selection, slug])
 
-  const grouped = useMemo(() => groupByDay(items), [items])
+  const grouped = useMemo(() => groupByDay(visibleItems), [visibleItems])
 
   const handleRevert = useCallback(async () => {
     if (!selection || selection.kind !== "history") return
@@ -144,9 +186,11 @@ export function HistoryPanel({ slug, currentContent, open, onOpenChange, onRever
               {loading && (
                 <div className="px-2 py-3 text-xs text-muted-foreground">Loading…</div>
               )}
-              {!loading && items.length === 0 && (
+              {!loading && visibleItems.length === 0 && (
                 <div className="px-2 py-3 text-xs text-muted-foreground">
-                  No history yet. Edits will appear here as you save.
+                  {items.length === 0
+                    ? "No history yet. Edits will appear here as you save."
+                    : "No prior versions differ from the current buffer."}
                 </div>
               )}
               {grouped.map((group) => (
@@ -386,6 +430,27 @@ function relativeTime(ts: number): string {
   const h = Math.round(m / 60)
   if (h < 24) return `${h}h ago`
   return new Date(ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+}
+
+async function hashHex(algo: "SHA-256" | "SHA-1", bytes: Uint8Array): Promise<string> {
+  const buf = await crypto.subtle.digest(algo, bytes)
+  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("")
+}
+
+async function sha256OfText(text: string): Promise<string> {
+  return hashHex("SHA-256", new TextEncoder().encode(text))
+}
+
+// Git stores files as `blob <byteLength>\0<bytes>` hashed with SHA-1; we
+// recompute that hash here so we can compare against the per-commit blob sha
+// the server extracts from `git log --raw`.
+async function gitBlobSha1OfText(text: string): Promise<string> {
+  const content = new TextEncoder().encode(text)
+  const header = new TextEncoder().encode(`blob ${content.length}\0`)
+  const combined = new Uint8Array(header.length + content.length)
+  combined.set(header, 0)
+  combined.set(content, header.length)
+  return hashHex("SHA-1", combined)
 }
 
 function fullTime(ts: number): string {

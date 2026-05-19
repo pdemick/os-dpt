@@ -303,23 +303,6 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
     [setHistoryWarning],
   )
 
-  const restoreDraft = useCallback((slug: string) => {
-    setFiles((f) => {
-      const cur = f[slug]
-      if (!cur || cur.draftOnDisk == null) return f
-      return { ...f, [slug]: { ...cur, buffer: cur.draftOnDisk } }
-    })
-  }, [])
-
-  const discardDraft = useCallback(async (slug: string) => {
-    await api.deleteDraft(slug)
-    setFiles((f) => {
-      const cur = f[slug]
-      if (!cur) return f
-      return { ...f, [slug]: { ...cur, buffer: cur.content, draftOnDisk: null } }
-    })
-  }, [])
-
   const createWorksheet = useCallback(
     async (name: string) => {
       const meta = await api.createWorksheet(name)
@@ -436,8 +419,6 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
       updateBuffer,
       updateCursor,
       save,
-      restoreDraft,
-      discardDraft,
       createWorksheet,
       deleteWorksheet,
       refreshList,
@@ -463,8 +444,6 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
       updateBuffer,
       updateCursor,
       save,
-      restoreDraft,
-      discardDraft,
       createWorksheet,
       deleteWorksheet,
       refreshList,

@@ -4,7 +4,6 @@ import { WorksheetSidebar } from "@/components/editor/WorksheetSidebar"
 import { WorksheetTabs } from "@/components/editor/WorksheetTabs"
 import { ActiveEditor } from "@/components/editor/ActiveEditor"
 import { StatusBar } from "@/components/editor/StatusBar"
-import { RestoreDraftBanner } from "@/components/editor/RestoreDraftBanner"
 import { ChatPanel } from "@/components/agent/ChatPanel"
 import { EditorWithResults } from "@/components/editor/EditorWithResults"
 
@@ -18,7 +17,6 @@ export function Worksheets() {
           </aside>
           <div className="flex min-w-0 flex-1 flex-col">
             <WorksheetTabs />
-            <RestoreDraftBanner />
             <EditorWithResults editor={<ActiveEditor />} />
             <StatusBar />
           </div>

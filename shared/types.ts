@@ -71,6 +71,8 @@ export interface HistoryEntry {
   label: string | null
   meta: Record<string, unknown> | null
   preview: string
+  /** SHA-256 hex of the entry's content. Used to skip rows identical to the current buffer. */
+  contentSha: string
 }
 
 export interface HistoryEntryDetail extends HistoryEntry {
@@ -89,6 +91,8 @@ export interface GitCommitItem {
   ts: number
   subject: string
   author: string | null
+  /** Git blob SHA-1 of the worksheet file at this commit; null when unknown. */
+  contentSha: string | null
 }
 
 export interface HistoryTimelineItem {

@@ -39,8 +39,6 @@ export interface WorksheetsContextValue {
   updateBuffer: (slug: string, content: string) => void
   updateCursor: (slug: string, cursor: CursorPos, scrollTop: number) => void
   save: (slug: string) => Promise<void>
-  restoreDraft: (slug: string) => void
-  discardDraft: (slug: string) => Promise<void>
   createWorksheet: (name: string) => Promise<string>
   deleteWorksheet: (slug: string) => Promise<void>
   refreshList: () => Promise<void>
