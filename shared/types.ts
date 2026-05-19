@@ -14,6 +14,9 @@ export interface TabState {
   cursor: CursorPos
   scrollTop: number
   connectionId: string | null
+  /** True once the user has explicitly picked or cleared this tab's connection.
+   *  Suppresses the "auto-bind sole active connection" behavior on later loads. */
+  connectionExplicit?: boolean
 }
 
 export interface Session {

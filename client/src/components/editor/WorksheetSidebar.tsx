@@ -1,23 +1,42 @@
-import { useState } from "react"
-import { FileText, Plus, Trash2 } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { FileText, Pencil, Plus, Trash2 } from "lucide-react"
 import { useWorksheets } from "@/hooks/use-worksheets"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
 export function WorksheetSidebar() {
-  const { list, session, openTab, deleteWorksheet, createWorksheet } = useWorksheets()
-  const [newName, setNewName] = useState("")
-  const [newOpen, setNewOpen] = useState(false)
+  const { list, session, openTab, deleteWorksheet, createWorksheet, renameWorksheet } =
+    useWorksheets()
+  const [editingSlug, setEditingSlug] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState("")
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (editingSlug && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [editingSlug])
+
+  const startEdit = (slug: string, name: string) => {
+    setEditingSlug(slug)
+    setEditValue(name)
+  }
+
+  const commitEdit = async () => {
+    const slug = editingSlug
+    if (!slug) return
+    const next = editValue.trim()
+    setEditingSlug(null)
+    if (next) await renameWorksheet(slug, next)
+  }
+
+  const cancelEdit = () => {
+    setEditingSlug(null)
+    setEditValue("")
+  }
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
@@ -25,39 +44,15 @@ export function WorksheetSidebar() {
         <span className="text-xs font-medium uppercase tracking-wider text-sidebar-foreground/60">
           Worksheets
         </span>
-        <Dialog open={newOpen} onOpenChange={setNewOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>New worksheet</DialogTitle>
-            </DialogHeader>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault()
-                if (!newName.trim()) return
-                await createWorksheet(newName.trim())
-                setNewName("")
-                setNewOpen(false)
-              }}
-            >
-              <Input
-                autoFocus
-                placeholder="query name"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-              />
-              <DialogFooter className="mt-3">
-                <Button type="submit" disabled={!newName.trim()}>
-                  Create
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 w-6 p-0"
+          aria-label="New worksheet"
+          onClick={() => void createWorksheet()}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
       </div>
       <ScrollArea className="flex-1">
         {list.length === 0 ? (
@@ -68,6 +63,7 @@ export function WorksheetSidebar() {
           <ul className="py-1">
             {list.map((meta) => {
               const isActive = session.activeSlug === meta.slug
+              const isEditing = editingSlug === meta.slug
               return (
                 <li
                   key={meta.slug}
@@ -78,24 +74,62 @@ export function WorksheetSidebar() {
                       : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => openTab(meta.slug)}
-                    className="flex flex-1 items-center gap-2 px-3 py-1.5 text-left text-xs"
-                  >
-                    <FileText className="size-3.5 shrink-0 opacity-60" />
-                    <span className="flex-1 truncate font-mono">{meta.slug}</span>
-                  </button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => void deleteWorksheet(meta.slug)}
-                    className="size-5 opacity-0 group-hover:opacity-60 hover:opacity-100"
-                    aria-label={`Delete ${meta.slug}`}
-                  >
-                    <Trash2 className="size-3" />
-                  </Button>
+                  {isEditing ? (
+                    <div className="flex flex-1 items-center gap-2 px-3 py-1">
+                      <FileText className="size-3.5 shrink-0 opacity-60" />
+                      <Input
+                        ref={inputRef}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => void commitEdit()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            void commitEdit()
+                          } else if (e.key === "Escape") {
+                            e.preventDefault()
+                            cancelEdit()
+                          }
+                        }}
+                        className="h-6 px-1 text-xs"
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openTab(meta.slug)}
+                      onDoubleClick={() => startEdit(meta.slug, meta.name)}
+                      title={meta.slug}
+                      className="flex flex-1 items-center gap-2 px-3 py-1.5 text-left text-xs"
+                    >
+                      <FileText className="size-3.5 shrink-0 opacity-60" />
+                      <span className="flex-1 truncate">{meta.name}</span>
+                    </button>
+                  )}
+                  {!isEditing && (
+                    <>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => startEdit(meta.slug, meta.name)}
+                        className="size-5 opacity-0 group-hover:opacity-60 hover:opacity-100"
+                        aria-label={`Rename ${meta.name}`}
+                      >
+                        <Pencil className="size-3" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => void deleteWorksheet(meta.slug)}
+                        className="size-5 opacity-0 group-hover:opacity-60 hover:opacity-100"
+                        aria-label={`Delete ${meta.name}`}
+                      >
+                        <Trash2 className="size-3" />
+                      </Button>
+                    </>
+                  )}
                 </li>
               )
             })}

@@ -30,6 +30,7 @@ function normalizeTab(t: Partial<TabState> & { slug: string }): TabState {
     cursor: t.cursor ?? { line: 0, ch: 0 },
     scrollTop: t.scrollTop ?? 0,
     connectionId: t.connectionId ?? null,
+    connectionExplicit: t.connectionExplicit ?? false,
   }
 }
 
@@ -218,14 +219,18 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const setTabConnection = useCallback(
-    (slug: string, connectionId: string | null) => {
+    (slug: string, connectionId: string | null, opts?: { explicit?: boolean }) => {
+      const explicit = opts?.explicit ?? true
       setSession((s) => {
         const idx = s.openTabs.findIndex((t) => t.slug === slug)
         if (idx === -1) return s
         const prev = s.openTabs[idx]
-        if (prev.connectionId === connectionId) return s
+        const nextExplicit = explicit || (prev.connectionExplicit ?? false)
+        if (prev.connectionId === connectionId && (prev.connectionExplicit ?? false) === nextExplicit) {
+          return s
+        }
         const openTabs = [...s.openTabs]
-        openTabs[idx] = { ...prev, connectionId }
+        openTabs[idx] = { ...prev, connectionId, connectionExplicit: nextExplicit }
         return { ...s, openTabs }
       })
       if (connectionId && !schemasByConn[connectionId]) {
@@ -304,13 +309,38 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
   )
 
   const createWorksheet = useCallback(
-    async (name: string) => {
+    async (name?: string) => {
       const meta = await api.createWorksheet(name)
       setList((l) => [meta, ...l.filter((m) => m.slug !== meta.slug)])
       await openTab(meta.slug)
       return meta.slug
     },
     [openTab],
+  )
+
+  const applyMeta = useCallback((slug: string, meta: WorksheetMeta) => {
+    setFiles((f) => {
+      const cur = f[slug]
+      if (!cur) return f
+      return { ...f, [slug]: { ...cur, meta } }
+    })
+    setList((l) => {
+      const idx = l.findIndex((m) => m.slug === slug)
+      if (idx === -1) return l
+      const next = [...l]
+      next[idx] = meta
+      return next
+    })
+  }, [])
+
+  const renameWorksheet = useCallback(
+    async (slug: string, name: string) => {
+      const trimmed = name.trim()
+      if (!trimmed) return
+      const meta = await api.renameWorksheet(slug, trimmed)
+      applyMeta(slug, meta)
+    },
+    [applyMeta],
   )
 
   const deleteWorksheet = useCallback(
@@ -350,6 +380,33 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
     }
   }, [activeConnectionId])
 
+  const autoNameAttempted = useRef<Set<string>>(new Set())
+
+  const maybeAutoName = useCallback(
+    async (slug: string) => {
+      if (autoNameAttempted.current.has(slug)) return
+      const cur = filesRef.current[slug]
+      if (!cur) return
+      if (cur.meta.name !== cur.meta.slug) return
+      const sql = cur.buffer.trim()
+      if (!sql) return
+      autoNameAttempted.current.add(slug)
+      try {
+        const res = await api.autoNameWorksheet(slug, cur.buffer)
+        if (!res.skipped) {
+          applyMeta(slug, {
+            slug,
+            name: res.name,
+            updatedAt: filesRef.current[slug]?.meta.updatedAt ?? new Date().toISOString(),
+          })
+        }
+      } catch {
+        // best-effort — leave the flag set so we don't hammer on repeated runs this session
+      }
+    },
+    [applyMeta],
+  )
+
   const executeActive = useCallback(
     async (sql: string) => {
       const slug = sessionRef.current.activeSlug
@@ -377,8 +434,9 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
         result = { ok: false, error: (err as Error).message }
       }
       setRuntimes((r) => ({ ...r, [slug]: { running: false, lastResult: result } }))
+      if (result.ok) void maybeAutoName(slug)
     },
-    [],
+    [maybeAutoName],
   )
 
   const clearResult = useCallback((slug: string) => {
@@ -421,6 +479,7 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
       save,
       createWorksheet,
       deleteWorksheet,
+      renameWorksheet,
       refreshList,
       refreshSchema,
       applyReverted,
@@ -446,6 +505,7 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
       save,
       createWorksheet,
       deleteWorksheet,
+      renameWorksheet,
       refreshList,
       refreshSchema,
       applyReverted,

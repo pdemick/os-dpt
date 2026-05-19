@@ -21,12 +21,33 @@ export const api = {
     return data.worksheets
   },
 
-  createWorksheet: async (name: string): Promise<WorksheetMeta> =>
+  createWorksheet: async (name?: string): Promise<WorksheetMeta> =>
     jsonOrThrow(
       await fetch("/api/worksheets", {
         method: "POST",
         headers: { "content-type": "application/json" },
+        body: JSON.stringify(name ? { name } : {}),
+      }),
+    ),
+
+  renameWorksheet: async (slug: string, name: string): Promise<WorksheetMeta> =>
+    jsonOrThrow(
+      await fetch(`/api/worksheets/${encodeURIComponent(slug)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ name }),
+      }),
+    ),
+
+  autoNameWorksheet: async (
+    slug: string,
+    sql: string,
+  ): Promise<{ name: string; skipped: boolean }> =>
+    jsonOrThrow(
+      await fetch(`/api/worksheets/${encodeURIComponent(slug)}/auto-name`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sql }),
       }),
     ),
 

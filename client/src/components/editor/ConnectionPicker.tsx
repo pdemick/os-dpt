@@ -1,5 +1,5 @@
 import { ChevronsUpDown, DatabaseIcon, CheckIcon } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import type { Connection } from "@shared/connections"
 
@@ -29,11 +29,23 @@ export function ConnectionPicker({ pulse = false }: Props) {
   const slug = session.activeSlug
   const tab = slug ? session.openTabs.find((t) => t.slug === slug) : null
   const connectionId = tab?.connectionId ?? null
+  const connectionExplicit = tab?.connectionExplicit ?? false
   // The bound connection may exist in the workspace but no longer be active
   // (user disconnected); still surface its name so the user knows what's wired.
   const bound: Connection | null =
     (connectionId && connections.find((c) => c.id === connectionId)) || null
   const boundActive = bound?.active ?? false
+
+  // If a tab has no connection and there's exactly one active connection,
+  // pre-select it. Suppressed once the user has explicitly picked or cleared
+  // a connection on this tab — that decision persists in session.json.
+  useEffect(() => {
+    if (!slug) return
+    if (connectionId !== null) return
+    if (connectionExplicit) return
+    if (active.length !== 1) return
+    setTabConnection(slug, active[0].id, { explicit: false })
+  }, [slug, connectionId, connectionExplicit, active, setTabConnection])
 
   if (!slug) return null
 
