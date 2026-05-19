@@ -10,6 +10,7 @@ const CHATS_DIR = path.join(OSDPT_DIR, "chats")
 const SCHEMAS_DIR = path.join(OSDPT_DIR, "schemas")
 const SESSION_FILE = path.join(OSDPT_DIR, "session.json")
 const SCHEMA_FILE = path.join(OSDPT_DIR, "schema.json")
+const HISTORY_FILE = path.join(OSDPT_DIR, "history.db")
 const GITIGNORE = ".gitignore"
 
 export const CONTEXT_FILES = ["schemas", "conventions", "feedback"] as const
@@ -84,6 +85,7 @@ export const paths = {
   connectionSchema: (id: string) => workspacePath(SCHEMAS_DIR, `${id}.json`),
   session: () => workspacePath(SESSION_FILE),
   schema: () => workspacePath(SCHEMA_FILE),
+  history: () => workspacePath(HISTORY_FILE),
   chats: () => workspacePath(CHATS_DIR),
   chat: (id: string) => workspacePath(CHATS_DIR, `${id}.json`),
   context: () => workspacePath(CONTEXT_DIR),

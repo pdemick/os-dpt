@@ -129,15 +129,29 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
     queueSessionWrite()
   }, [session, loading, queueSessionWrite])
 
+  const setHistoryWarning = useCallback(
+    (slug: string, warning: FileState["historyWarning"]) => {
+      setFiles((f) => {
+        const cur = f[slug]
+        if (!cur || cur.historyWarning === warning) return f
+        return { ...f, [slug]: { ...cur, historyWarning: warning } }
+      })
+    },
+    [],
+  )
+
   // Debounced per-slug draft writers
   const draftTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
-  const queueDraftWrite = useCallback((slug: string, content: string) => {
-    const existing = draftTimers.current[slug]
-    if (existing) clearTimeout(existing)
-    draftTimers.current[slug] = setTimeout(() => {
-      void api.putDraft(slug, content)
-    }, 400)
-  }, [])
+  const queueDraftWrite = useCallback(
+    (slug: string, content: string) => {
+      const existing = draftTimers.current[slug]
+      if (existing) clearTimeout(existing)
+      draftTimers.current[slug] = setTimeout(() => {
+        void api.putDraft(slug, content).then((skip) => setHistoryWarning(slug, skip))
+      }, 400)
+    },
+    [setHistoryWarning],
+  )
   const cancelDraftTimer = useCallback((slug: string) => {
     const t = draftTimers.current[slug]
     if (t) {
@@ -261,18 +275,33 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
     const cur = filesRef.current[slug]
     if (!cur) return
     const content = cur.buffer
-    const meta = await api.saveWorksheet(slug, content)
+    const { historySkipped, ...meta } = await api.saveWorksheet(slug, content)
     await api.deleteDraft(slug)
     setFiles((f) => {
       const c = f[slug]
       if (!c) return f
-      return { ...f, [slug]: { ...c, content, draftOnDisk: null, lastSavedAt: Date.now(), meta } }
+      return {
+        ...f,
+        [slug]: {
+          ...c,
+          content,
+          draftOnDisk: null,
+          lastSavedAt: Date.now(),
+          meta,
+          historyWarning: historySkipped,
+        },
+      }
     })
     setList((l) => {
       const others = l.filter((m) => m.slug !== slug)
       return [meta, ...others]
     })
   }, [])
+
+  const clearHistoryWarning = useCallback(
+    (slug: string) => setHistoryWarning(slug, null),
+    [setHistoryWarning],
+  )
 
   const restoreDraft = useCallback((slug: string) => {
     setFiles((f) => {
@@ -310,6 +339,18 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
     },
     [closeTab, cancelDraftTimer],
   )
+
+  const applyReverted = useCallback((slug: string, content: string) => {
+    cancelDraftTimer(slug)
+    setFiles((f) => {
+      const cur = f[slug]
+      if (!cur) return f
+      return {
+        ...f,
+        [slug]: { ...cur, content, buffer: content, draftOnDisk: null, lastSavedAt: Date.now() },
+      }
+    })
+  }, [cancelDraftTimer])
 
   const activeConnectionId = useMemo(() => {
     const slug = session.activeSlug
@@ -401,6 +442,8 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
       deleteWorksheet,
       refreshList,
       refreshSchema,
+      applyReverted,
+      clearHistoryWarning,
       executeActive,
       clearResult,
       setResultsPaneSize,
@@ -426,6 +469,8 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
       deleteWorksheet,
       refreshList,
       refreshSchema,
+      applyReverted,
+      clearHistoryWarning,
       executeActive,
       clearResult,
       setResultsPaneSize,
@@ -443,5 +488,6 @@ function fileFromPayload(p: { meta: WorksheetMeta; content: string; draftContent
     buffer: p.draftContent ?? p.content,
     draftOnDisk: p.draftContent,
     lastSavedAt: 0,
+    historyWarning: null,
   }
 }

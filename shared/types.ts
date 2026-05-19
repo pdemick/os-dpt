@@ -54,3 +54,46 @@ export interface WorksheetPayload {
   content: string
   draftContent: string | null
 }
+
+export type HistorySource =
+  | "autosave"
+  | "save"
+  | "revert"
+  | "external"
+  | "snapshot"
+
+export interface HistoryEntry {
+  id: number
+  worksheet: string
+  ts: number
+  source: HistorySource
+  size: number
+  label: string | null
+  meta: Record<string, unknown> | null
+  preview: string
+}
+
+export interface HistoryEntryDetail extends HistoryEntry {
+  content: string
+}
+
+export type HistorySkipReason = "oversize"
+
+export interface SaveWorksheetResponse extends WorksheetMeta {
+  historySkipped: HistorySkipReason | null
+}
+
+export interface GitCommitItem {
+  kind: "git"
+  sha: string
+  ts: number
+  subject: string
+  author: string | null
+}
+
+export interface HistoryTimelineItem {
+  kind: "history"
+  entry: HistoryEntry
+}
+
+export type TimelineItem = HistoryTimelineItem | GitCommitItem

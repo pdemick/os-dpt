@@ -10,9 +10,14 @@ import worksheets from "./api/worksheets.ts"
 import drafts from "./api/drafts.ts"
 import session from "./api/session.ts"
 import schema from "./api/schema.ts"
+import history from "./api/history.ts"
 import agent from "./api/agent.ts"
+import { closeHistoryDb, openHistoryDb } from "./history/db.ts"
+import { startWorksheetsWatcher, stopWorksheetsWatcher } from "./history/watcher.ts"
 
 const workspace = await initWorkspace(process.argv.slice(2))
+openHistoryDb()
+startWorksheetsWatcher()
 
 const app = new Hono()
 app.get("/api/health", (c) => c.json({ ok: true, workspace }))
@@ -22,6 +27,7 @@ app.route("/api/worksheets", worksheets)
 app.route("/api/drafts", drafts)
 app.route("/api/session", session)
 app.route("/api/schema", schema)
+app.route("/api/history", history)
 app.route("/api/agent", agent)
 
 app.onError((err, c) => {
@@ -41,6 +47,8 @@ const shutdown = async (signal: NodeJS.Signals) => {
   if (shuttingDown) return
   shuttingDown = true
   console.log(`\nreceived ${signal}, closing pools…`)
+  stopWorksheetsWatcher()
+  closeHistoryDb()
   await closeAll()
   server.close(() => process.exit(0))
 }

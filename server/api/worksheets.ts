@@ -4,6 +4,8 @@ import path from "node:path"
 import { assertSafeSlug, paths } from "../workspace.ts"
 import { writeAtomic } from "../lib/fs-atomic.ts"
 import { dedupeSlug, slugify } from "../lib/slug.ts"
+import { recordHistory } from "../history/record.ts"
+import { deleteWorksheetHistory, hasEntries } from "../history/query.ts"
 import type { WorksheetMeta, WorksheetPayload } from "@shared/types.ts"
 
 const app = new Hono()
@@ -40,6 +42,9 @@ app.post("/", async (c) => {
   const desired = slugify(body.name ?? "untitled")
   const existing = new Set((await listMetas()).map((m) => m.slug))
   const slug = dedupeSlug(desired, existing)
+  // Order matters: recordHistory must precede writeAtomic so the empty-string
+  // sha is registered via noteRecentWrite before fs.watch fires for the new file.
+  recordHistory({ worksheet: slug, source: "save", content: "" })
   await writeAtomic(paths.worksheet(slug), "")
   const stat = await fs.stat(paths.worksheet(slug))
   return c.json({ slug, name: slug, updatedAt: stat.mtime.toISOString() } satisfies WorksheetMeta)
@@ -56,6 +61,12 @@ app.get("/:slug", async (c) => {
     return c.json({ error: "not_found" }, 404)
   }
   const stat = await fs.stat(file)
+  if (!hasEntries(slug)) {
+    // First time we've seen this worksheet — seed the timeline with the
+    // on-disk content as a "snapshot" rather than mislabelling it as an
+    // external edit.
+    recordHistory({ worksheet: slug, source: "snapshot", content, ts: stat.mtimeMs })
+  }
   const draftContent = await readDraft(slug)
   const payload: WorksheetPayload = {
     meta: { slug, name: slug, updatedAt: stat.mtime.toISOString() },
@@ -69,10 +80,12 @@ app.put("/:slug", async (c) => {
   const slug = c.req.param("slug")
   assertSafeSlug(slug)
   const { content } = await c.req.json<{ content: string }>()
+  const result = recordHistory({ worksheet: slug, source: "save", content })
   await writeAtomic(paths.worksheet(slug), content)
   // dropping draft on explicit save is the caller's choice; the drafts route handles delete
   const stat = await fs.stat(paths.worksheet(slug))
-  return c.json({ slug, name: slug, updatedAt: stat.mtime.toISOString() } satisfies WorksheetMeta)
+  const meta: WorksheetMeta = { slug, name: slug, updatedAt: stat.mtime.toISOString() }
+  return c.json({ ...meta, historySkipped: result.skipped ?? null })
 })
 
 app.delete("/:slug", async (c) => {
@@ -80,6 +93,7 @@ app.delete("/:slug", async (c) => {
   assertSafeSlug(slug)
   await fs.rm(paths.worksheet(slug), { force: true })
   await fs.rm(paths.draft(slug), { force: true })
+  deleteWorksheetHistory(slug)
   return c.json({ ok: true })
 })
 

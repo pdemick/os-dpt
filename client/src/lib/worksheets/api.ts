@@ -1,6 +1,8 @@
 import type {
+  HistorySkipReason,
   QueryResponse,
   Session,
+  SaveWorksheetResponse,
   SQLNamespace,
   WorksheetMeta,
   WorksheetPayload,
@@ -31,7 +33,7 @@ export const api = {
   getWorksheet: async (slug: string): Promise<WorksheetPayload> =>
     jsonOrThrow(await fetch(`/api/worksheets/${encodeURIComponent(slug)}`)),
 
-  saveWorksheet: async (slug: string, content: string): Promise<WorksheetMeta> =>
+  saveWorksheet: async (slug: string, content: string): Promise<SaveWorksheetResponse> =>
     jsonOrThrow(
       await fetch(`/api/worksheets/${encodeURIComponent(slug)}`, {
         method: "PUT",
@@ -44,12 +46,15 @@ export const api = {
     await fetch(`/api/worksheets/${encodeURIComponent(slug)}`, { method: "DELETE" })
   },
 
-  putDraft: async (slug: string, content: string): Promise<void> => {
-    await fetch(`/api/drafts/${encodeURIComponent(slug)}`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content }),
-    })
+  putDraft: async (slug: string, content: string): Promise<HistorySkipReason | null> => {
+    const data = await jsonOrThrow<{ ok: boolean; historySkipped: HistorySkipReason | null }>(
+      await fetch(`/api/drafts/${encodeURIComponent(slug)}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ content }),
+      }),
+    )
+    return data.historySkipped
   },
 
   deleteDraft: async (slug: string): Promise<void> => {

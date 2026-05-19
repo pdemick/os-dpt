@@ -1,6 +1,7 @@
 import { createContext } from "react"
 import type {
   CursorPos,
+  HistorySkipReason,
   QueryResponse,
   Session,
   SQLNamespace,
@@ -13,6 +14,8 @@ export interface FileState {
   buffer: string
   draftOnDisk: string | null
   lastSavedAt: number
+  /** Set when the most recent save/autosave was not recorded to history (e.g. oversize). */
+  historyWarning: HistorySkipReason | null
 }
 
 export interface TabRuntime {
@@ -43,6 +46,10 @@ export interface WorksheetsContextValue {
   refreshList: () => Promise<void>
   /** Refresh schema for the active tab's connection (or fall back to the static file). */
   refreshSchema: () => Promise<void>
+  /** Apply server-side revert: replace buffer + saved content with the restored version. */
+  applyReverted: (slug: string, content: string) => void
+  /** Clear the per-slug history warning (e.g. after the user dismisses the banner). */
+  clearHistoryWarning: (slug: string) => void
   executeActive: (sql: string) => Promise<void>
   clearResult: (slug: string) => void
   setResultsPaneSize: (size: number | null) => void
