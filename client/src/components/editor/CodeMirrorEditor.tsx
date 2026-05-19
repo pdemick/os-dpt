@@ -7,6 +7,8 @@ import { oneDark } from "@codemirror/theme-one-dark"
 import { EditorView, keymap } from "@codemirror/view"
 import type { SQLNamespace } from "@shared/types"
 import { useResolvedTheme } from "@/hooks/use-resolved-theme"
+import { onInsertAtCursor } from "@/lib/editor-bus"
+import { slashMenuExtension } from "./slash-menu/extension"
 import { statementAtCursor } from "@/lib/sql/statement-at-cursor"
 
 interface Props {
@@ -14,8 +16,6 @@ interface Props {
   onChange: (value: string) => void
   onCursorChange?: (line: number, ch: number, scrollTop: number) => void
   onSave?: () => void
-  /** Called when `/` is pressed at the start of an otherwise-empty line. */
-  onSlashTrigger?: () => void
   /** Called with the SQL to execute: the current selection if non-empty, otherwise the statement at the cursor. */
   onExecute?: (sql: string) => void
   schema: SQLNamespace
@@ -36,7 +36,6 @@ export function CodeMirrorEditor({
   onChange,
   onCursorChange,
   onSave,
-  onSlashTrigger,
   onExecute,
   schema,
   initialCursor,
@@ -49,12 +48,10 @@ export function CodeMirrorEditor({
   // refs so the `extensions` memo only invalidates when `schema` actually changes.
   const onSaveRef = useRef(onSave)
   const onCursorChangeRef = useRef(onCursorChange)
-  const onSlashTriggerRef = useRef(onSlashTrigger)
   const onExecuteRef = useRef(onExecute)
   useLayoutEffect(() => {
     onSaveRef.current = onSave
     onCursorChangeRef.current = onCursorChange
-    onSlashTriggerRef.current = onSlashTrigger
     onExecuteRef.current = onExecute
   })
 
@@ -87,21 +84,6 @@ export function CodeMirrorEditor({
             },
           },
           {
-            key: "/",
-            run: (view) => {
-              const handler = onSlashTriggerRef.current
-              if (!handler) return false
-              const head = view.state.selection.main.head
-              const line = view.state.doc.lineAt(head)
-              const before = line.text.slice(0, head - line.from)
-              // Only hijack `/` when the user is at the start of a blank
-              // line — keeps `/*` comments and `/` division untouched.
-              if (before.trim() !== "") return false
-              handler()
-              return true
-            },
-          },
-          {
             key: "Mod-Enter",
             preventDefault: true,
             run: (view) => {
@@ -121,6 +103,7 @@ export function CodeMirrorEditor({
           },
         ]),
       ),
+      slashMenuExtension(schema),
       EditorView.updateListener.of((u) => {
         const cb = onCursorChangeRef.current
         if (!cb) return
@@ -146,6 +129,20 @@ export function CodeMirrorEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Listen for external insertion requests (command palette etc.).
+  useEffect(() => {
+    return onInsertAtCursor((text) => {
+      const view = ref.current?.view
+      if (!view) return
+      const { from, to } = view.state.selection.main
+      view.dispatch({
+        changes: { from, to, insert: text },
+        selection: { anchor: from + text.length },
+      })
+      view.focus()
+    })
+  }, [])
+
   return (
     <CodeMirror
       ref={ref}
@@ -159,7 +156,9 @@ export function CodeMirrorEditor({
         highlightActiveLine: true,
         bracketMatching: true,
         closeBrackets: true,
-        autocompletion: true,
+        // Our slash menu owns identifier completion; the built-in CM
+        // autocomplete would double-render on top of it.
+        autocompletion: false,
         foldGutter: true,
       }}
       height="100%"

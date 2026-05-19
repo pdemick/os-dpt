@@ -1,8 +1,9 @@
 import { useState } from "react"
-import { History, X } from "lucide-react"
+import { History, MessageSquareText, X } from "lucide-react"
 import { useWorksheets } from "@/hooks/use-worksheets"
 import { Button } from "@/components/ui/button"
 import { useAgent } from "@/lib/agent/context"
+import { AgentHistoryPanel } from "@/components/agent/AgentHistoryPanel"
 import type { HistorySkipReason } from "@shared/types"
 import { CodeMirrorEditor } from "./CodeMirrorEditor"
 import { HistoryPanel } from "./HistoryPanel"
@@ -19,8 +20,9 @@ export function ActiveEditor() {
     clearHistoryWarning,
     executeActive,
   } = useWorksheets()
-  const { open: openAgent } = useAgent()
+  const { chatsForActive } = useAgent()
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [agentsOpen, setAgentsOpen] = useState(false)
   const slug = session.activeSlug
   if (!slug) {
     return (
@@ -51,6 +53,18 @@ export function ActiveEditor() {
           <History className="size-3.5" />
           History
         </Button>
+        {chatsForActive.length > 0 && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-xs"
+            onClick={() => setAgentsOpen(true)}
+          >
+            <MessageSquareText className="size-3.5" />
+            Agents ({chatsForActive.length})
+          </Button>
+        )}
       </div>
       {file.historyWarning && (
         <HistoryWarningBanner
@@ -65,7 +79,6 @@ export function ActiveEditor() {
           onChange={(v) => updateBuffer(slug, v)}
           onCursorChange={(line, ch, scrollTop) => updateCursor(slug, { line, ch }, scrollTop)}
           onSave={() => void save(slug)}
-          onSlashTrigger={() => void openAgent()}
           onExecute={(sql) => void executeActive(sql)}
           schema={schema}
           initialCursor={tab?.cursor}
@@ -79,6 +92,7 @@ export function ActiveEditor() {
         onOpenChange={setHistoryOpen}
         onReverted={(content) => applyReverted(slug, content)}
       />
+      <AgentHistoryPanel slug={slug} open={agentsOpen} onOpenChange={setAgentsOpen} />
     </div>
   )
 }

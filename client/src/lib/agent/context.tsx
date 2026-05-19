@@ -2,32 +2,22 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react"
 import type { ReactNode } from "react"
 
-import type { AgentEvent, AgentToolName, ChatSessionMeta } from "@shared/agent"
+import type { AgentEvent, ChatSessionMeta } from "@shared/agent"
 
 import { useWorksheets } from "@/hooks/use-worksheets"
 
 import { agentApi } from "./api"
+import type { TranscriptItem } from "./context-types"
+import { hydrateMessages } from "./hydrate"
 
-export type TranscriptItem =
-  | { id: string; kind: "user"; text: string }
-  | { id: string; kind: "assistant_text"; text: string }
-  | {
-      id: string
-      kind: "tool"
-      toolUseId: string
-      name: AgentToolName
-      status: "running" | "ok" | "error"
-      summary: string
-    }
-  | { id: string; kind: "sql_written"; worksheetSlug: string; length: number }
-  | { id: string; kind: "ask_user"; toolUseId: string; question: string }
-  | { id: string; kind: "error"; message: string }
+export type { TranscriptItem }
 
 interface AgentContextValue {
   isOpen: boolean
@@ -40,6 +30,12 @@ interface AgentContextValue {
   pendingQuestion: string | null
   send(text: string): Promise<void>
   answer(text: string): Promise<void>
+  /** Past chats whose `worksheetSlug` matches the active worksheet. */
+  chatsForActive: ChatSessionMeta[]
+  /** Replace the current panel session with the chat at `id`. */
+  loadSession(id: string): Promise<void>
+  /** Delete a stored chat. If it's the active session, reset the panel. */
+  deleteChat(id: string): Promise<void>
 }
 
 const AgentContext = createContext<AgentContextValue | null>(null)
@@ -130,11 +126,27 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<TranscriptItem[]>([])
   const [streaming, setStreaming] = useState(false)
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null)
+  const [allChats, setAllChats] = useState<ChatSessionMeta[]>([])
 
   // ref for the active worksheet slug so consume() picks up the live value
   // when the user has switched tabs mid-conversation.
   const activeSlugRef = useRef(editorSession.activeSlug)
   activeSlugRef.current = editorSession.activeSlug
+
+  const refreshChats = useCallback(async () => {
+    try {
+      const list = await agentApi.listSessions()
+      setAllChats(list)
+    } catch {
+      // best-effort — leave existing list in place
+    }
+  }, [])
+
+  // Load chats once the provider mounts, and re-load when the active
+  // worksheet changes (the filtered view is what feeds the panel).
+  useEffect(() => {
+    void refreshChats()
+  }, [refreshChats, editorSession.activeSlug])
 
   const ensureSession = useCallback(async (): Promise<ChatSessionMeta> => {
     if (session) return session
@@ -192,7 +204,34 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
       connectionId,
     })
     setSession(res.meta)
-  }, [session])
+    await refreshChats()
+  }, [session, refreshChats])
+
+  const loadSession = useCallback(
+    async (id: string) => {
+      const res = await agentApi.getSession(id)
+      setSession(res.meta)
+      setItems(hydrateMessages(res.messages))
+      setPendingQuestion(res.meta.pending?.question ?? null)
+      setStreaming(false)
+      setIsOpen(true)
+    },
+    [],
+  )
+
+  const deleteChat = useCallback(
+    async (id: string) => {
+      await agentApi.deleteSession(id).catch(() => {})
+      if (session?.id === id) {
+        setSession(null)
+        setItems([])
+        setPendingQuestion(null)
+        setStreaming(false)
+      }
+      await refreshChats()
+    },
+    [session, refreshChats],
+  )
 
   const send = useCallback(
     async (text: string) => {
@@ -211,8 +250,11 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
         return
       }
       await consume(stream)
+      // First message in a fresh session updates the title server-side;
+      // pull the new meta so the history list shows it.
+      await refreshChats()
     },
-    [ensureSession, streaming, pendingQuestion, consume],
+    [ensureSession, streaming, pendingQuestion, consume, refreshChats],
   )
 
   const answer = useCallback(
@@ -234,6 +276,14 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
     [pendingQuestion, session, consume],
   )
 
+  const chatsForActive = useMemo(
+    () =>
+      editorSession.activeSlug
+        ? allChats.filter((c) => c.worksheetSlug === editorSession.activeSlug)
+        : [],
+    [allChats, editorSession.activeSlug],
+  )
+
   const value = useMemo<AgentContextValue>(
     () => ({
       isOpen,
@@ -246,8 +296,25 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
       pendingQuestion,
       send,
       answer,
+      chatsForActive,
+      loadSession,
+      deleteChat,
     }),
-    [isOpen, open, close, newChat, session, items, streaming, pendingQuestion, send, answer],
+    [
+      isOpen,
+      open,
+      close,
+      newChat,
+      session,
+      items,
+      streaming,
+      pendingQuestion,
+      send,
+      answer,
+      chatsForActive,
+      loadSession,
+      deleteChat,
+    ],
   )
 
   return <AgentContext.Provider value={value}>{children}</AgentContext.Provider>

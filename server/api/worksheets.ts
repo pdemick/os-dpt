@@ -13,7 +13,7 @@ import {
   setName,
 } from "../storage/worksheet-names.ts"
 import { generateWorksheetName } from "../agent/naming.ts"
-import type { WorksheetMeta, WorksheetPayload } from "@shared/types.ts"
+import type { WorksheetMeta, WorksheetPayload, WorksheetSearchHit } from "@shared/types.ts"
 
 const app = new Hono()
 const MAX_NAME_LEN = 80
@@ -54,6 +54,47 @@ async function readDraft(slug: string): Promise<string | null> {
 
 app.get("/", async (c) => {
   return c.json({ worksheets: await listMetas() })
+})
+
+// Substring search over slug + file content. Returns at most MAX_HITS
+// matches, each with a one-line snippet for the UI. Case-insensitive.
+// Empty query returns no hits.
+const SEARCH_MAX_HITS = 50
+const SEARCH_SNIPPET_LEN = 120
+
+app.get("/search", async (c) => {
+  const q = (c.req.query("q") ?? "").trim()
+  if (q === "") return c.json({ hits: [] satisfies WorksheetSearchHit[] })
+  const needle = q.toLowerCase()
+  const metas = await listMetas()
+  const hits: WorksheetSearchHit[] = []
+  for (const meta of metas) {
+    if (hits.length >= SEARCH_MAX_HITS) break
+    const slugHit = meta.slug.toLowerCase().includes(needle)
+    let content = ""
+    try {
+      content = await fs.readFile(paths.worksheet(meta.slug), "utf8")
+    } catch {
+      // skip unreadable files
+    }
+    const lower = content.toLowerCase()
+    const idx = lower.indexOf(needle)
+    if (!slugHit && idx === -1) continue
+    let snippet = ""
+    let lineNumber: number | undefined
+    if (idx !== -1) {
+      const lineStart = lower.lastIndexOf("\n", idx) + 1
+      const lineEndRaw = lower.indexOf("\n", idx)
+      const lineEnd = lineEndRaw === -1 ? content.length : lineEndRaw
+      const line = content.slice(lineStart, lineEnd)
+      snippet = line.length > SEARCH_SNIPPET_LEN
+        ? line.slice(0, SEARCH_SNIPPET_LEN) + "…"
+        : line
+      lineNumber = lower.slice(0, lineStart).split("\n").length
+    }
+    hits.push({ slug: meta.slug, name: meta.name, snippet, lineNumber })
+  }
+  return c.json({ hits })
 })
 
 app.post("/", async (c) => {

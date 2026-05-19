@@ -6,6 +6,7 @@ import type {
   SQLNamespace,
   WorksheetMeta,
   WorksheetPayload,
+  WorksheetSearchHit,
 } from "@shared/types"
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -65,6 +66,13 @@ export const api = {
 
   deleteWorksheet: async (slug: string): Promise<void> => {
     await fetch(`/api/worksheets/${encodeURIComponent(slug)}`, { method: "DELETE" })
+  },
+
+  searchWorksheets: async (q: string): Promise<WorksheetSearchHit[]> => {
+    const data = await jsonOrThrow<{ hits: WorksheetSearchHit[] }>(
+      await fetch(`/api/worksheets/search?q=${encodeURIComponent(q)}`),
+    )
+    return data.hits
   },
 
   putDraft: async (slug: string, content: string): Promise<HistorySkipReason | null> => {

@@ -58,6 +58,15 @@ export interface WorksheetPayload {
   draftContent: string | null
 }
 
+export interface WorksheetSearchHit {
+  slug: string
+  name: string
+  /** One-line excerpt around the first content match; empty if only the slug matched. */
+  snippet: string
+  /** 1-based line number of the snippet, when there's a content hit. */
+  lineNumber?: number
+}
+
 export type HistorySource =
   | "autosave"
   | "save"

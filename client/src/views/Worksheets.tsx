@@ -5,6 +5,7 @@ import { WorksheetTabs } from "@/components/editor/WorksheetTabs"
 import { ActiveEditor } from "@/components/editor/ActiveEditor"
 import { StatusBar } from "@/components/editor/StatusBar"
 import { ChatPanel } from "@/components/agent/ChatPanel"
+import { CommandPalette } from "@/components/CommandPalette"
 import { EditorWithResults } from "@/components/editor/EditorWithResults"
 
 export function Worksheets() {
@@ -22,6 +23,7 @@ export function Worksheets() {
           </div>
           <ChatPanel />
         </div>
+        <CommandPalette />
       </AgentChatProvider>
     </WorksheetsProvider>
   )
