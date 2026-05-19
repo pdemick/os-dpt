@@ -6,6 +6,7 @@ import { ActiveEditor } from "@/components/editor/ActiveEditor"
 import { StatusBar } from "@/components/editor/StatusBar"
 import { RestoreDraftBanner } from "@/components/editor/RestoreDraftBanner"
 import { ChatPanel } from "@/components/agent/ChatPanel"
+import { EditorWithResults } from "@/components/editor/EditorWithResults"
 
 export function Worksheets() {
   return (
@@ -18,7 +19,7 @@ export function Worksheets() {
           <div className="flex min-w-0 flex-1 flex-col">
             <WorksheetTabs />
             <RestoreDraftBanner />
-            <ActiveEditor />
+            <EditorWithResults editor={<ActiveEditor />} />
             <StatusBar />
           </div>
           <ChatPanel />

@@ -7,6 +7,7 @@ const CONTEXT_DIR = "context"
 const OSDPT_DIR = ".os-dpt"
 const DRAFTS_DIR = path.join(OSDPT_DIR, "drafts")
 const CHATS_DIR = path.join(OSDPT_DIR, "chats")
+const SCHEMAS_DIR = path.join(OSDPT_DIR, "schemas")
 const SESSION_FILE = path.join(OSDPT_DIR, "session.json")
 const SCHEMA_FILE = path.join(OSDPT_DIR, "schema.json")
 const GITIGNORE = ".gitignore"
@@ -32,12 +33,16 @@ export async function initWorkspace(argv: string[] = process.argv.slice(2)): Pro
   await fs.mkdir(path.join(root, DRAFTS_DIR), { recursive: true })
   await fs.mkdir(path.join(root, CHATS_DIR), { recursive: true })
   await fs.mkdir(path.join(root, CONTEXT_DIR), { recursive: true })
+  await fs.mkdir(path.join(root, SCHEMAS_DIR), { recursive: true })
 
   const sessionPath = path.join(root, SESSION_FILE)
   try {
     await fs.access(sessionPath)
   } catch {
-    await fs.writeFile(sessionPath, JSON.stringify({ openTabs: [], activeSlug: null }, null, 2))
+    await fs.writeFile(
+      sessionPath,
+      JSON.stringify({ openTabs: [], activeSlug: null, resultsPaneSize: null }, null, 2),
+    )
   }
 
   await ensureGitignored(root)
@@ -75,6 +80,8 @@ export const paths = {
   worksheet: (slug: string) => workspacePath(WORKSHEETS_DIR, `${slug}.sql`),
   drafts: () => workspacePath(DRAFTS_DIR),
   draft: (slug: string) => workspacePath(DRAFTS_DIR, `${slug}.sql`),
+  schemas: () => workspacePath(SCHEMAS_DIR),
+  connectionSchema: (id: string) => workspacePath(SCHEMAS_DIR, `${id}.json`),
   session: () => workspacePath(SESSION_FILE),
   schema: () => workspacePath(SCHEMA_FILE),
   chats: () => workspacePath(CHATS_DIR),

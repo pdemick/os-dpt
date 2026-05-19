@@ -6,21 +6,48 @@ import {
   useState,
 } from "react"
 import type { ReactNode } from "react"
-import type { Session, SQLNamespace, WorksheetMeta } from "@shared/types"
+import type {
+  CursorPos,
+  QueryResponse,
+  Session,
+  SQLNamespace,
+  TabState,
+  WorksheetMeta,
+} from "@shared/types"
 import { api } from "./api"
 import {
   WorksheetsContext,
   type FileState,
+  type TabRuntime,
   type WorksheetsContextValue,
 } from "./context-object"
 
-const EMPTY_SESSION: Session = { openTabs: [], activeSlug: null }
+const EMPTY_SESSION: Session = { openTabs: [], activeSlug: null, resultsPaneSize: null }
+
+function normalizeTab(t: Partial<TabState> & { slug: string }): TabState {
+  return {
+    slug: t.slug,
+    cursor: t.cursor ?? { line: 0, ch: 0 },
+    scrollTop: t.scrollTop ?? 0,
+    connectionId: t.connectionId ?? null,
+  }
+}
+
+function normalizeSession(s: Session): Session {
+  return {
+    openTabs: (s.openTabs ?? []).map(normalizeTab),
+    activeSlug: s.activeSlug ?? null,
+    resultsPaneSize: s.resultsPaneSize ?? null,
+  }
+}
 
 export function WorksheetsProvider({ children }: { children: ReactNode }) {
   const [files, setFiles] = useState<Record<string, FileState>>({})
   const [list, setList] = useState<WorksheetMeta[]>([])
   const [session, setSession] = useState<Session>(EMPTY_SESSION)
-  const [schema, setSchema] = useState<SQLNamespace>({})
+  const [staticSchema, setStaticSchema] = useState<SQLNamespace>({})
+  const [schemasByConn, setSchemasByConn] = useState<Record<string, SQLNamespace>>({})
+  const [runtimes, setRuntimes] = useState<Record<string, TabRuntime>>({})
   const [loading, setLoading] = useState(true)
 
   // Bootstrap: load list, session, schema; hydrate each open tab.
@@ -34,10 +61,11 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
       ])
       if (cancelled) return
       setList(wsList)
-      setSession(sess)
-      setSchema(sch)
+      const normalized = normalizeSession(sess)
+      setSession(normalized)
+      setStaticSchema(sch)
 
-      const slugs = sess.openTabs.map((t) => t.slug)
+      const slugs = normalized.openTabs.map((t) => t.slug)
       const hydrated = await Promise.all(
         slugs.map(async (slug) => {
           try {
@@ -54,10 +82,29 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
       setFiles(next)
 
       // Drop any tabs that failed to load (file deleted out-of-band)
-      const liveTabs = sess.openTabs.filter((t) => next[t.slug])
-      if (liveTabs.length !== sess.openTabs.length) {
-        const activeSlug = sess.activeSlug && next[sess.activeSlug] ? sess.activeSlug : (liveTabs[0]?.slug ?? null)
-        setSession({ openTabs: liveTabs, activeSlug })
+      const liveTabs = normalized.openTabs.filter((t) => next[t.slug])
+      if (liveTabs.length !== normalized.openTabs.length) {
+        const activeSlug =
+          normalized.activeSlug && next[normalized.activeSlug]
+            ? normalized.activeSlug
+            : (liveTabs[0]?.slug ?? null)
+        setSession((s) => ({ ...s, openTabs: liveTabs, activeSlug }))
+      }
+
+      // Preload per-connection schemas for any tabs already bound.
+      const connIds = new Set<string>()
+      for (const t of liveTabs) if (t.connectionId) connIds.add(t.connectionId)
+      if (connIds.size > 0) {
+        const loaded = await Promise.all(
+          [...connIds].map(async (id) => [id, await api.getConnectionSchema(id)] as const),
+        )
+        if (!cancelled) {
+          setSchemasByConn((prev) => {
+            const next: Record<string, SQLNamespace> = { ...prev }
+            for (const [id, ns] of loaded) next[id] = ns
+            return next
+          })
+        }
       }
 
       setLoading(false)
@@ -103,8 +150,10 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
     setList(await api.listWorksheets())
   }, [])
 
-  const refreshSchema = useCallback(async () => {
-    setSchema(await api.getSchema())
+  const ensureConnectionSchema = useCallback(async (id: string) => {
+    const ns = await api.getConnectionSchema(id)
+    setSchemasByConn((prev) => ({ ...prev, [id]: ns }))
+    return ns
   }, [])
 
   const openTab = useCallback(
@@ -117,31 +166,60 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
         const exists = s.openTabs.some((t) => t.slug === slug)
         const openTabs = exists
           ? s.openTabs
-          : [...s.openTabs, { slug, cursor: { line: 0, ch: 0 }, scrollTop: 0 }]
-        return { openTabs, activeSlug: slug }
+          : [
+              ...s.openTabs,
+              { slug, cursor: { line: 0, ch: 0 }, scrollTop: 0, connectionId: null },
+            ]
+        return { ...s, openTabs, activeSlug: slug }
       })
     },
     [files],
   )
 
-  const closeTab = useCallback((slug: string) => {
-    cancelDraftTimer(slug)
-    setSession((s) => {
-      const openTabs = s.openTabs.filter((t) => t.slug !== slug)
-      const activeSlug =
-        s.activeSlug === slug ? (openTabs[openTabs.length - 1]?.slug ?? null) : s.activeSlug
-      return { openTabs, activeSlug }
-    })
-    setFiles((f) => {
-      const { [slug]: _drop, ...rest } = f
-      void _drop
-      return rest
-    })
-  }, [cancelDraftTimer])
+  const closeTab = useCallback(
+    (slug: string) => {
+      cancelDraftTimer(slug)
+      setSession((s) => {
+        const openTabs = s.openTabs.filter((t) => t.slug !== slug)
+        const activeSlug =
+          s.activeSlug === slug ? (openTabs[openTabs.length - 1]?.slug ?? null) : s.activeSlug
+        return { ...s, openTabs, activeSlug }
+      })
+      setFiles((f) => {
+        const { [slug]: _drop, ...rest } = f
+        void _drop
+        return rest
+      })
+      setRuntimes((r) => {
+        const { [slug]: _drop, ...rest } = r
+        void _drop
+        return rest
+      })
+    },
+    [cancelDraftTimer],
+  )
 
   const setActive = useCallback((slug: string | null) => {
     setSession((s) => ({ ...s, activeSlug: slug }))
   }, [])
+
+  const setTabConnection = useCallback(
+    (slug: string, connectionId: string | null) => {
+      setSession((s) => {
+        const idx = s.openTabs.findIndex((t) => t.slug === slug)
+        if (idx === -1) return s
+        const prev = s.openTabs[idx]
+        if (prev.connectionId === connectionId) return s
+        const openTabs = [...s.openTabs]
+        openTabs[idx] = { ...prev, connectionId }
+        return { ...s, openTabs }
+      })
+      if (connectionId && !schemasByConn[connectionId]) {
+        void ensureConnectionSchema(connectionId)
+      }
+    },
+    [ensureConnectionSchema, schemasByConn],
+  )
 
   const updateBuffer = useCallback(
     (slug: string, content: string) => {
@@ -169,12 +247,15 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
           return s
         }
         const openTabs = [...s.openTabs]
-        openTabs[idx] = { slug, cursor, scrollTop }
+        openTabs[idx] = { ...prev, cursor, scrollTop }
         return { ...s, openTabs }
       })
     },
     [],
   )
+
+  const filesRef = useRef(files)
+  filesRef.current = files
 
   const save = useCallback(async (slug: string) => {
     const cur = filesRef.current[slug]
@@ -230,8 +311,59 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
     [closeTab, cancelDraftTimer],
   )
 
-  const filesRef = useRef(files)
-  filesRef.current = files
+  const activeConnectionId = useMemo(() => {
+    const slug = session.activeSlug
+    if (!slug) return null
+    return session.openTabs.find((t) => t.slug === slug)?.connectionId ?? null
+  }, [session.activeSlug, session.openTabs])
+
+  const refreshSchema = useCallback(async () => {
+    if (activeConnectionId) {
+      const ns = await api.refreshConnectionSchema(activeConnectionId)
+      setSchemasByConn((prev) => ({ ...prev, [activeConnectionId]: ns }))
+    } else {
+      setStaticSchema(await api.getSchema())
+    }
+  }, [activeConnectionId])
+
+  const executeActive = useCallback(
+    async (sql: string) => {
+      const slug = sessionRef.current.activeSlug
+      if (!slug) return
+      const tab = sessionRef.current.openTabs.find((t) => t.slug === slug)
+      const connectionId = tab?.connectionId
+      if (!connectionId) {
+        setRuntimes((r) => ({
+          ...r,
+          [slug]: {
+            running: false,
+            lastResult: { ok: false, error: "Pick a connection first." },
+          },
+        }))
+        return
+      }
+      setRuntimes((r) => ({
+        ...r,
+        [slug]: { running: true, lastResult: r[slug]?.lastResult ?? null },
+      }))
+      let result: QueryResponse
+      try {
+        result = await api.runQuery(connectionId, sql)
+      } catch (err) {
+        result = { ok: false, error: (err as Error).message }
+      }
+      setRuntimes((r) => ({ ...r, [slug]: { running: false, lastResult: result } }))
+    },
+    [],
+  )
+
+  const clearResult = useCallback((slug: string) => {
+    setRuntimes((r) => ({ ...r, [slug]: { running: false, lastResult: null } }))
+  }, [])
+
+  const setResultsPaneSize = useCallback((size: number | null) => {
+    setSession((s) => (s.resultsPaneSize === size ? s : { ...s, resultsPaneSize: size }))
+  }, [])
 
   const dirty = useCallback(
     (slug: string) => {
@@ -241,16 +373,25 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
     [files],
   )
 
+  const schema = useMemo<SQLNamespace>(() => {
+    if (activeConnectionId) {
+      return schemasByConn[activeConnectionId] ?? {}
+    }
+    return staticSchema
+  }, [activeConnectionId, schemasByConn, staticSchema])
+
   const value = useMemo<WorksheetsContextValue>(
     () => ({
       files,
       list,
       session,
       schema,
+      runtimes,
       loading,
       openTab,
       closeTab,
       setActive,
+      setTabConnection,
       updateBuffer,
       updateCursor,
       save,
@@ -260,6 +401,9 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
       deleteWorksheet,
       refreshList,
       refreshSchema,
+      executeActive,
+      clearResult,
+      setResultsPaneSize,
       dirty,
     }),
     [
@@ -267,10 +411,12 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
       list,
       session,
       schema,
+      runtimes,
       loading,
       openTab,
       closeTab,
       setActive,
+      setTabConnection,
       updateBuffer,
       updateCursor,
       save,
@@ -280,6 +426,9 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
       deleteWorksheet,
       refreshList,
       refreshSchema,
+      executeActive,
+      clearResult,
+      setResultsPaneSize,
       dirty,
     ],
   )
@@ -296,4 +445,3 @@ function fileFromPayload(p: { meta: WorksheetMeta; content: string; draftContent
     lastSavedAt: 0,
   }
 }
-

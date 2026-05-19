@@ -6,7 +6,7 @@ import type { Session } from "@shared/types.ts"
 
 const app = new Hono()
 
-const EMPTY: Session = { openTabs: [], activeSlug: null }
+const EMPTY: Session = { openTabs: [], activeSlug: null, resultsPaneSize: null }
 
 app.get("/", async (c) => {
   try {

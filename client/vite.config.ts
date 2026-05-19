@@ -13,9 +13,11 @@ export default defineConfig({
     },
   },
   server: {
+    port: process.env.VITE_PORT ? Number(process.env.VITE_PORT) : undefined,
+    strictPort: !!process.env.VITE_PORT,
     proxy: {
       "/api": {
-        target: "http://localhost:3756",
+        target: `http://127.0.0.1:${process.env.API_PORT ?? 3756}`,
         changeOrigin: true,
       },
     },

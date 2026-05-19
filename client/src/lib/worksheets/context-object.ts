@@ -1,6 +1,7 @@
 import { createContext } from "react"
 import type {
   CursorPos,
+  QueryResponse,
   Session,
   SQLNamespace,
   WorksheetMeta,
@@ -14,16 +15,24 @@ export interface FileState {
   lastSavedAt: number
 }
 
+export interface TabRuntime {
+  running: boolean
+  lastResult: QueryResponse | null
+}
+
 export interface WorksheetsContextValue {
   files: Record<string, FileState>
   list: WorksheetMeta[]
   session: Session
+  /** Schema fed to CodeMirror for the active tab — per-connection if bound, else the static workspace schema. */
   schema: SQLNamespace
+  runtimes: Record<string, TabRuntime>
   loading: boolean
 
   openTab: (slug: string) => Promise<void>
   closeTab: (slug: string) => void
   setActive: (slug: string | null) => void
+  setTabConnection: (slug: string, connectionId: string | null) => void
   updateBuffer: (slug: string, content: string) => void
   updateCursor: (slug: string, cursor: CursorPos, scrollTop: number) => void
   save: (slug: string) => Promise<void>
@@ -32,7 +41,11 @@ export interface WorksheetsContextValue {
   createWorksheet: (name: string) => Promise<string>
   deleteWorksheet: (slug: string) => Promise<void>
   refreshList: () => Promise<void>
+  /** Refresh schema for the active tab's connection (or fall back to the static file). */
   refreshSchema: () => Promise<void>
+  executeActive: (sql: string) => Promise<void>
+  clearResult: (slug: string) => void
+  setResultsPaneSize: (size: number | null) => void
 
   dirty: (slug: string) => boolean
 }

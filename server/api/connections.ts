@@ -1,13 +1,35 @@
 import crypto from "node:crypto"
+import { promises as fs } from "node:fs"
 
 import { Hono } from "hono"
+import { HTTPException } from "hono/http-exception"
 
 import type { Connection, NewConnectionInput } from "@shared/connections.ts"
+import type { QueryOk, SQLNamespace } from "@shared/types.ts"
 
 import { CredentialVault } from "../credentials/vault.ts"
+import { introspect } from "../db/introspect.ts"
 import { createPool, normalizePgError, testConnection } from "../db/postgres.ts"
-import { activeIds, removePool, setPool } from "../db/registry.ts"
+import { activeIds, getPool, removePool, setPool } from "../db/registry.ts"
+import { writeAtomic } from "../lib/fs-atomic.ts"
 import { ConnectionStore, type StoredConnection } from "../storage/connections.ts"
+import { paths } from "../workspace.ts"
+
+const MAX_ROWS = 1000
+
+// Connection ids are server-minted UUIDs; reject anything that isn't one so
+// the value can be safely interpolated into filesystem paths.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function assertSafeConnectionId(id: string): void {
+  if (!UUID_RE.test(id)) {
+    throw new HTTPException(400, { message: `Invalid connection id` })
+  }
+}
+
+async function writeConnectionSchema(id: string, schema: SQLNamespace): Promise<void> {
+  await writeAtomic(paths.connectionSchema(id), JSON.stringify(schema, null, 2))
+}
 
 function parseInput(body: unknown): NewConnectionInput {
   if (typeof body !== "object" || body === null) {
@@ -82,9 +104,11 @@ export function connectionsRouter(workspace: string): Hono {
 
   router.delete("/:id", async (c) => {
     const id = c.req.param("id")
+    assertSafeConnectionId(id)
     await removePool(id)
     await vault.deletePassword(id)
     await store.remove(id)
+    await fs.rm(paths.connectionSchema(id), { force: true }).catch(() => {})
     return c.json({ ok: true })
   })
 
@@ -116,6 +140,7 @@ export function connectionsRouter(workspace: string): Hono {
 
   router.post("/:id/connect", async (c) => {
     const id = c.req.param("id")
+    assertSafeConnectionId(id)
     const conn = await store.get(id)
     if (!conn) return c.json({ error: "not_found" }, 404)
     const password = await vault.getPassword(id)
@@ -131,6 +156,10 @@ export function connectionsRouter(workspace: string): Hono {
         client.release()
       }
       setPool(id, pool)
+      // Fire-and-forget: seed the schema cache so autocomplete works immediately.
+      void introspect(pool)
+        .then((ns) => writeConnectionSchema(id, ns))
+        .catch((err) => console.warn(`[introspect ${id}]`, err))
       return c.json({ ok: true })
     } catch (err) {
       await pool.end().catch(() => {})
@@ -138,8 +167,76 @@ export function connectionsRouter(workspace: string): Hono {
     }
   })
 
+  router.post("/:id/query", async (c) => {
+    const id = c.req.param("id")
+    assertSafeConnectionId(id)
+    const pool = getPool(id)
+    if (!pool) return c.json({ ok: false, error: "not_connected" }, 409)
+    let sql: string
+    try {
+      const body = (await c.req.json()) as { sql?: unknown }
+      if (typeof body.sql !== "string" || body.sql.trim() === "") {
+        return c.json({ ok: false, error: "Missing sql" }, 400)
+      }
+      sql = body.sql
+    } catch {
+      return c.json({ ok: false, error: "Invalid JSON body" }, 400)
+    }
+    const started = Date.now()
+    try {
+      const result = await pool.query({ text: sql, rowMode: "array" })
+      const durationMs = Date.now() - started
+      const allRows = Array.isArray(result.rows) ? (result.rows as unknown[][]) : []
+      const truncated = allRows.length > MAX_ROWS
+      const rows = truncated ? allRows.slice(0, MAX_ROWS) : allRows
+      const payload: QueryOk = {
+        ok: true,
+        columns: (result.fields ?? []).map((f) => ({
+          name: f.name,
+          dataTypeID: f.dataTypeID,
+        })),
+        rows,
+        rowCount: typeof result.rowCount === "number" ? result.rowCount : rows.length,
+        durationMs,
+        truncated,
+      }
+      return c.json(payload)
+    } catch (err) {
+      const normalized = normalizePgError(err)
+      const code = (err as { code?: string })?.code
+      return c.json({ ok: false, error: normalized.message, code }, 200)
+    }
+  })
+
+  router.get("/:id/schema", async (c) => {
+    const id = c.req.param("id")
+    assertSafeConnectionId(id)
+    try {
+      const raw = await fs.readFile(paths.connectionSchema(id), "utf8")
+      return c.json(JSON.parse(raw) as SQLNamespace)
+    } catch {
+      return c.json({} satisfies SQLNamespace)
+    }
+  })
+
+  router.post("/:id/schema/refresh", async (c) => {
+    const id = c.req.param("id")
+    assertSafeConnectionId(id)
+    const pool = getPool(id)
+    if (!pool) return c.json({ ok: false, error: "not_connected" }, 409)
+    try {
+      const schema = await introspect(pool)
+      await writeConnectionSchema(id, schema)
+      return c.json(schema)
+    } catch (err) {
+      return c.json({ ok: false, error: normalizePgError(err).message }, 500)
+    }
+  })
+
   router.post("/:id/disconnect", async (c) => {
-    await removePool(c.req.param("id"))
+    const id = c.req.param("id")
+    assertSafeConnectionId(id)
+    await removePool(id)
     return c.json({ ok: true })
   })
 

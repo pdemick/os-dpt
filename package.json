@@ -4,7 +4,7 @@
   "private": true,
   "description": "Local web-based SQL editor with a built-in chat-to-SQL AI agent.",
   "scripts": {
-    "dev": "pnpm -r --parallel --filter ./client --filter ./server dev",
+    "dev": "node ./scripts/dev.mjs",
     "dev:client": "pnpm --dir client dev",
     "dev:server": "pnpm --dir server dev",
     "build": "pnpm --dir client build",

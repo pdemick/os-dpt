@@ -3,7 +3,15 @@ import { useAgent } from "@/lib/agent/context"
 import { CodeMirrorEditor } from "./CodeMirrorEditor"
 
 export function ActiveEditor() {
-  const { session, files, schema, updateBuffer, updateCursor, save } = useWorksheets()
+  const {
+    session,
+    files,
+    schema,
+    updateBuffer,
+    updateCursor,
+    save,
+    executeActive,
+  } = useWorksheets()
   const { open: openAgent } = useAgent()
   const slug = session.activeSlug
   if (!slug) {
@@ -31,6 +39,7 @@ export function ActiveEditor() {
         onCursorChange={(line, ch, scrollTop) => updateCursor(slug, { line, ch }, scrollTop)}
         onSave={() => void save(slug)}
         onSlashTrigger={() => void openAgent()}
+        onExecute={(sql) => void executeActive(sql)}
         schema={schema}
         initialCursor={tab?.cursor}
         initialScrollTop={tab?.scrollTop}

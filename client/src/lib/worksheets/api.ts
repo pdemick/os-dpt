@@ -1,4 +1,5 @@
 import type {
+  QueryResponse,
   Session,
   SQLNamespace,
   WorksheetMeta,
@@ -68,4 +69,27 @@ export const api = {
 
   getSchema: async (): Promise<SQLNamespace> =>
     jsonOrThrow(await fetch("/api/schema")),
+
+  getConnectionSchema: async (id: string): Promise<SQLNamespace> =>
+    jsonOrThrow(await fetch(`/api/connections/${encodeURIComponent(id)}/schema`)),
+
+  refreshConnectionSchema: async (id: string): Promise<SQLNamespace> =>
+    jsonOrThrow(
+      await fetch(`/api/connections/${encodeURIComponent(id)}/schema/refresh`, {
+        method: "POST",
+      }),
+    ),
+
+  runQuery: async (id: string, sql: string): Promise<QueryResponse> => {
+    const res = await fetch(`/api/connections/${encodeURIComponent(id)}/query`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sql }),
+    })
+    // The server returns 200 for SQL errors (with ok:false); other statuses
+    // (e.g. 409 not_connected) we surface as a QueryErr too.
+    const body = (await res.json().catch(() => ({}))) as QueryResponse | { error?: string }
+    if ("ok" in body) return body
+    return { ok: false, error: typeof body.error === "string" ? body.error : `${res.status}` }
+  },
 }
