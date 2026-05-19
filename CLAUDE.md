@@ -62,8 +62,13 @@ Rule of thumb: anything sensitive lives in `.os-dpt/` and is gitignored. Anythin
 
 ### Credential storage
 - OS keychain via **keytar** (macOS Keychain, Windows Credential Vault, libsecret on Linux).
-- Approach: a per-workspace master key is stored in the OS keychain; per-connection credentials are AES-GCM-encrypted with that key and written to `.os-dpt/credentials.enc`.
+- Approach: a per-workspace master key is stored in the OS keychain; per-connection credentials are AES-256-GCM-encrypted with that key and written to `.os-dpt/credentials.enc`.
+- The keychain entry is keyed by a stable workspace UUID stored in `.os-dpt/workspace-id`, not the workspace path — so the key survives the workspace being moved, accessed via a symlink, or hit by case-sensitivity quirks.
 - No master password prompt after OS login — mirrors DBeaver's default UX.
+
+### Security posture
+- Server binds to `127.0.0.1` only. No authentication on the API; security relies on loopback isolation (any process running as the same user can hit the API, which is consistent with how DBeaver-class tools work locally).
+- The `Use SSL` checkbox on a connection sets `ssl: { rejectUnauthorized: false }` — traffic is encrypted, but the server certificate is **not** verified. This is intentional for v1 to avoid breaking against self-signed dev/staging hosts; a future `sslmode` field can opt into verification.
 
 ### Agent memory
 - The agent's "learning" is just markdown files in `context/`. The `write_context` tool appends or edits these; `get_context` reads them into the prompt.
@@ -77,9 +82,11 @@ Rule of thumb: anything sensitive lives in `.os-dpt/` and is gitignored. Anythin
 ### Database drivers
 - Start with `pg` for Postgres. Driver interface in `src/server/db/` is designed so adding MySQL, SQLite, etc. is a new module, not a refactor.
 
+### Backend HTTP framework
+- **Hono** on top of `@hono/node-server`. Small, fast, ergonomic routing, and a future-proof story for WebSockets / streaming.
+
 ## Open questions / not yet decided
 
-- Exact backend HTTP framework (likely Hono or Fastify — small, fast, good WS story).
 - LLM provider abstraction — single provider to start vs. provider-agnostic from day one.
 - Whether the agent runs entirely in the local server process or whether we expose a more structured "agent loop" the user could swap.
 - How to handle workspaces where the user hasn't run `git init` — auto-init? warn? require?
@@ -98,10 +105,9 @@ The npm package (this repo) and a user's workspace are fully separate concerns:
 
 ## Status
 
-- Repo initialized on `main` with `.gitignore` covering workspace paths + a `dev-workspace/` dir.
-- Top-level `client/`, `server/`, `shared/`, `cli/`, `bin/` directories exist. Only `client/` has real code so far.
-- Client scaffolded via `pnpm dlx shadcn@latest init --template vite --preset b1VlIttI --name client`. Sidebar component added via `shadcn add sidebar`.
-- App shell built: `SidebarProvider` + `AppSidebar` with three nav items (Worksheets / Connections / Settings) and a state-based view switcher in `client/src/App.tsx`. All three views are blank placeholders in `client/src/views/`.
-- Verified end-to-end in browser at `localhost:5173` — view switching + sidebar collapse work, no console errors.
+- pnpm monorepo: `client` + `server` workspaces, root scripts orchestrate both (`pnpm dev` runs Vite + Hono in parallel).
+- **Connections module live**: Hono server on `127.0.0.1:3756`, `/api/connections` (list/create/delete/test/connect/disconnect), AES-256-GCM credential vault in `.os-dpt/credentials.enc`, in-process `pg` pool registry, SIGINT/SIGTERM-driven graceful shutdown. Connections UI rebuilt with Active/Saved sections + Add dialog (Postgres-only).
+- Shared types live in `shared/`, consumed by both packages via `@shared/*`.
+- Client app shell: `SidebarProvider` + `AppSidebar` with Worksheets / Connections / Settings; Worksheets + Settings views are still blank placeholders.
 
-Next: stub the Node server (framework TBD: Hono vs Fastify), then a CLI in `cli/` that boots the server and opens the browser. Root `package.json` to coordinate the workspace (pnpm monorepo) once there's a second package.
+Next: CLI in `cli/` that boots the server and opens the browser; root `package.json` already coordinates the monorepo. Worksheets view + `/api/query` are the next feature.

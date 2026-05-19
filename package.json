@@ -4,9 +4,17 @@
   "private": true,
   "description": "Local web-based SQL editor with a built-in chat-to-SQL AI agent.",
   "scripts": {
-    "dev": "pnpm --dir client dev",
+    "dev": "pnpm -r --parallel --filter ./client --filter ./server dev",
+    "dev:client": "pnpm --dir client dev",
+    "dev:server": "pnpm --dir server dev",
     "build": "pnpm --dir client build",
-    "typecheck": "pnpm --dir client typecheck",
+    "typecheck": "pnpm -r typecheck",
     "lint": "pnpm --dir client lint"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "keytar"
+    ]
   }
 }
