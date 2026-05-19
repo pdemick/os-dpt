@@ -1,9 +1,22 @@
-import type { AgentEvent, ChatSessionMeta } from "@shared/agent"
+import type {
+  AgentEvent,
+  ChatSessionMeta,
+  UsageEntry,
+  UsageTotals,
+} from "@shared/agent"
 
 export interface CreateSessionInput {
   worksheetSlug?: string | null
   connectionId?: string | null
   title?: string | null
+}
+
+export interface WorksheetUsageSession {
+  id: string
+  title: string | null
+  worksheetSlug: string | null
+  updatedAt: string
+  totals: UsageTotals
 }
 
 export interface ChatSessionResponse {
@@ -48,6 +61,24 @@ export const agentApi = {
       method: "DELETE",
     })
   },
+
+  getWorksheetUsage: async (
+    slug: string,
+  ): Promise<{ totals: UsageTotals; bySession: WorksheetUsageSession[] }> =>
+    jsonOrThrow(
+      await fetch(
+        `/api/agent/usage?worksheetSlug=${encodeURIComponent(slug)}`,
+      ),
+    ),
+
+  getSessionUsage: async (
+    id: string,
+  ): Promise<{ totals: UsageTotals; entries: UsageEntry[] }> =>
+    jsonOrThrow(
+      await fetch(
+        `/api/agent/sessions/${encodeURIComponent(id)}/usage`,
+      ),
+    ),
 
   sendMessage: (id: string, message: string, signal?: AbortSignal) =>
     streamPost(`/api/agent/sessions/${encodeURIComponent(id)}/messages`, { message }, signal),

@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk"
 
 import type { AgentEvent, AgentToolName } from "@shared/agent.ts"
 
+import { costFromUsage } from "./pricing.ts"
 import { buildSystemPrompt } from "./prompt.ts"
 import {
   getAnthropicKey,
@@ -11,6 +12,7 @@ import {
   appendMessage,
   clearPending,
   persistSession,
+  recordUsage,
   setPending,
   type ChatSession,
 } from "./session.ts"
@@ -45,12 +47,14 @@ export async function runAgentTurn(opts: RunOptions): Promise<void> {
 
   for (let step = 0; step < MAX_STEPS; step += 1) {
     let final: Anthropic.Message
+    let model: string
+    let usage: Anthropic.Usage
     // Anthropic's stream.on("text", cb) is a sync listener — we can't
     // await emit() inside it. Chain emits through a promise so deltas
     // are written in order, then drain the chain before continuing.
     let textEmitChain: Promise<void> = Promise.resolve()
     try {
-      final = await streamAssistantMessage({
+      const result = await streamAssistantMessage({
         apiKey,
         system,
         tools,
@@ -62,12 +66,27 @@ export async function runAgentTurn(opts: RunOptions): Promise<void> {
         },
       })
       await textEmitChain
+      final = result.message
+      model = result.model
+      usage = result.usage
     } catch (err) {
       await emit({ type: "error", message: (err as Error).message })
       return
     }
 
     await appendMessage(session, { role: "assistant", content: final.content })
+
+    const entry = {
+      at: new Date().toISOString(),
+      model,
+      inputTokens: usage.input_tokens ?? 0,
+      outputTokens: usage.output_tokens ?? 0,
+      cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
+      cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+      costUsd: costFromUsage(model, usage),
+    }
+    await recordUsage(session, entry)
+    await emit({ type: "usage", entry, totals: session.meta.totals })
 
     const toolUses = toolUseBlocks(final)
     if (toolUses.length === 0) {

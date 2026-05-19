@@ -1,7 +1,12 @@
 import { Hono } from "hono"
 import { streamSSE } from "hono/streaming"
 
-import type { AgentEvent } from "@shared/agent.ts"
+import {
+  emptyTotals,
+  type AgentEvent,
+  type ChatSessionMeta,
+  type UsageTotals,
+} from "@shared/agent.ts"
 
 import { resumeWithAnswer, runAgentTurn } from "../agent/loop.ts"
 import {
@@ -37,6 +42,52 @@ async function withSessionLock<T>(id: string, fn: () => Promise<T>): Promise<T> 
 app.get("/sessions", async (c) => {
   const sessions = await listChats()
   return c.json({ sessions })
+})
+
+function addTotals(a: UsageTotals, b: UsageTotals): UsageTotals {
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheCreationTokens: a.cacheCreationTokens + b.cacheCreationTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    costUsd: a.costUsd + b.costUsd,
+    calls: a.calls + b.calls,
+  }
+}
+
+/**
+ * Aggregate token usage across sessions. Filter by ?worksheetSlug=... to
+ * scope to a single worksheet; omit the param for workspace-wide totals.
+ * Returns both the rollup and a per-session breakdown so the UI can show
+ * "this worksheet cost $X across N chats."
+ */
+app.get("/usage", async (c) => {
+  const slug = c.req.query("worksheetSlug")
+  const all = await listChats()
+  const sessions = slug
+    ? all.filter((s) => s.worksheetSlug === slug)
+    : all
+  const totals = sessions.reduce<UsageTotals>(
+    (acc, s) => addTotals(acc, s.totals),
+    emptyTotals(),
+  )
+  const bySession = sessions.map((s: ChatSessionMeta) => ({
+    id: s.id,
+    title: s.title,
+    worksheetSlug: s.worksheetSlug,
+    updatedAt: s.updatedAt,
+    totals: s.totals,
+  }))
+  return c.json({ totals, bySession })
+})
+
+app.get("/sessions/:id/usage", async (c) => {
+  const session = await getChat(c.req.param("id"))
+  if (!session) return c.json({ error: "not_found" }, 404)
+  return c.json({
+    totals: session.meta.totals,
+    entries: session.meta.usage,
+  })
 })
 
 app.post("/sessions", async (c) => {

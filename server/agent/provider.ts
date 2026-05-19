@@ -41,12 +41,19 @@ export interface StreamParams {
   onTextDelta?: (delta: string) => void
 }
 
+export interface StreamResult {
+  message: Anthropic.Message
+  model: string
+  usage: Anthropic.Usage
+}
+
 export async function streamAssistantMessage(
   p: StreamParams,
-): Promise<Anthropic.Message> {
+): Promise<StreamResult> {
   const client = new Anthropic({ apiKey: p.apiKey })
+  const model = p.model ?? DEFAULT_MODEL
   const stream = client.messages.stream({
-    model: p.model ?? DEFAULT_MODEL,
+    model,
     max_tokens: p.maxTokens ?? DEFAULT_MAX_TOKENS,
     system: p.system,
     messages: p.messages,
@@ -59,5 +66,6 @@ export async function streamAssistantMessage(
   if (p.onTextDelta) {
     stream.on("text", (delta) => p.onTextDelta?.(delta))
   }
-  return await stream.finalMessage()
+  const message = await stream.finalMessage()
+  return { message, model, usage: message.usage }
 }

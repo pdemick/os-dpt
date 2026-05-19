@@ -3,7 +3,12 @@ import crypto from "node:crypto"
 
 import type Anthropic from "@anthropic-ai/sdk"
 
-import type { ChatSessionMeta, PendingAsk } from "@shared/agent.ts"
+import {
+  emptyTotals,
+  type ChatSessionMeta,
+  type PendingAsk,
+  type UsageEntry,
+} from "@shared/agent.ts"
 
 import { writeAtomic } from "../lib/fs-atomic.ts"
 import { assertSafeChatId, paths } from "../workspace.ts"
@@ -35,7 +40,19 @@ function freshMeta(input: CreateChatInput): ChatSessionMeta {
     worksheetSlug: input.worksheetSlug ?? null,
     connectionId: input.connectionId ?? null,
     pending: null,
+    usage: [],
+    totals: emptyTotals(),
   }
+}
+
+/**
+ * Older sessions on disk predate token tracking. Backfill empty usage
+ * fields on read so callers can treat them as always-present.
+ */
+function ensureUsageFields(session: ChatSession): ChatSession {
+  if (!Array.isArray(session.meta.usage)) session.meta.usage = []
+  if (!session.meta.totals) session.meta.totals = emptyTotals()
+  return session
 }
 
 export async function createChat(input: CreateChatInput): Promise<ChatSession> {
@@ -48,7 +65,7 @@ export async function getChat(id: string): Promise<ChatSession | null> {
   assertSafeChatId(id)
   try {
     const raw = await fs.readFile(paths.chat(id), "utf8")
-    return JSON.parse(raw) as ChatSession
+    return ensureUsageFields(JSON.parse(raw) as ChatSession)
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null
     throw err
@@ -66,7 +83,7 @@ export async function listChats(): Promise<ChatSessionMeta[]> {
     if (!f.endsWith(".json")) continue
     try {
       const raw = await fs.readFile(paths.chat(f.slice(0, -5)), "utf8")
-      const data = JSON.parse(raw) as ChatSession
+      const data = ensureUsageFields(JSON.parse(raw) as ChatSession)
       out.push(data.meta)
     } catch {
       // skip unreadable / malformed transcripts; don't fail the whole list
@@ -101,6 +118,22 @@ export async function setPending(
 
 export async function clearPending(session: ChatSession): Promise<void> {
   session.meta.pending = null
+  session.meta.updatedAt = nowIso()
+  await persist(session)
+}
+
+export async function recordUsage(
+  session: ChatSession,
+  entry: UsageEntry,
+): Promise<void> {
+  session.meta.usage.push(entry)
+  const t = session.meta.totals
+  t.inputTokens += entry.inputTokens
+  t.outputTokens += entry.outputTokens
+  t.cacheCreationTokens += entry.cacheCreationTokens
+  t.cacheReadTokens += entry.cacheReadTokens
+  t.costUsd += entry.costUsd
+  t.calls += 1
   session.meta.updatedAt = nowIso()
   await persist(session)
 }

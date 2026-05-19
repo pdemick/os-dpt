@@ -14,6 +14,40 @@ export interface ChatSessionMeta {
   worksheetSlug: string | null
   connectionId: string | null
   pending: PendingAsk | null
+  usage: UsageEntry[]
+  totals: UsageTotals
+}
+
+/** One Anthropic API call's usage, attributed to a chat session. */
+export interface UsageEntry {
+  at: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  cacheCreationTokens: number
+  cacheReadTokens: number
+  costUsd: number
+}
+
+export interface UsageTotals {
+  inputTokens: number
+  outputTokens: number
+  cacheCreationTokens: number
+  cacheReadTokens: number
+  costUsd: number
+  /** Number of API calls (i.e. usage entries) folded into this rollup. */
+  calls: number
+}
+
+export function emptyTotals(): UsageTotals {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    costUsd: 0,
+    calls: 0,
+  }
 }
 
 export interface PendingAsk {
@@ -34,5 +68,6 @@ export type AgentEvent =
     }
   | { type: "sql_written"; worksheetSlug: string; sql: string }
   | { type: "ask_user"; toolUseId: string; question: string }
+  | { type: "usage"; entry: UsageEntry; totals: UsageTotals }
   | { type: "done" }
   | { type: "error"; message: string }
