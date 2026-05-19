@@ -3,7 +3,7 @@ import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
 
 import { aiProvidersRouter } from "./api/ai-providers.ts"
-import { connectionsRouter } from "./api/connections.ts"
+import { autoConnectAll, connectionsRouter } from "./api/connections.ts"
 import { closeAll } from "./db/registry.ts"
 import { initWorkspace } from "./workspace.ts"
 import worksheets from "./api/worksheets.ts"
@@ -18,6 +18,7 @@ import { startWorksheetsWatcher, stopWorksheetsWatcher } from "./history/watcher
 const workspace = await initWorkspace(process.argv.slice(2))
 openHistoryDb()
 startWorksheetsWatcher()
+void autoConnectAll(workspace)
 
 const app = new Hono()
 app.get("/api/health", (c) => c.json({ ok: true, workspace }))

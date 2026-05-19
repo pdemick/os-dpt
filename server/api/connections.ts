@@ -9,7 +9,12 @@ import type { QueryOk, SQLNamespace } from "@shared/types.ts"
 
 import { CredentialVault } from "../credentials/vault.ts"
 import { introspect } from "../db/introspect.ts"
-import { createPool, normalizePgError, testConnection } from "../db/postgres.ts"
+import {
+  createPool,
+  normalizePgError,
+  runWithRetry,
+  testConnection,
+} from "../db/postgres.ts"
 import { activeIds, getPool, removePool, setPool } from "../db/registry.ts"
 import { writeAtomic } from "../lib/fs-atomic.ts"
 import { ConnectionStore, type StoredConnection } from "../storage/connections.ts"
@@ -66,6 +71,70 @@ function parseInput(body: unknown): NewConnectionInput {
 
 function toApi(conn: StoredConnection, active: Set<string>): Connection {
   return { ...conn, active: active.has(conn.id) }
+}
+
+type ConnectResult = { ok: true } | { ok: false; error: string; status: number }
+
+// "replace" — user-initiated: always install this pool, ending any predecessor.
+// "claim"   — auto-connect: yield to any pool installed during our dial, so a
+//             racing user click can't be silently displaced by our late-arriving
+//             pool.
+type ConnectMode = "replace" | "claim"
+
+async function connectStored(
+  id: string,
+  store: ConnectionStore,
+  vault: CredentialVault,
+  mode: ConnectMode = "replace",
+): Promise<ConnectResult> {
+  const conn = await store.get(id)
+  if (!conn) return { ok: false, error: "not_found", status: 404 }
+  const password = await vault.getPassword(id)
+  if (password === null) {
+    return { ok: false, error: "missing_credentials", status: 400 }
+  }
+  const pool = createPool(conn, password)
+  try {
+    const client = await pool.connect()
+    try {
+      await client.query("SELECT 1")
+    } finally {
+      client.release()
+    }
+    if (mode === "claim" && getPool(id)) {
+      // Someone else (user click) won the race during our dial — drop ours.
+      await pool.end().catch(() => {})
+      return { ok: true }
+    }
+    setPool(id, pool)
+    void introspect(pool)
+      .then((ns) => writeConnectionSchema(id, ns))
+      .catch((err) => console.warn(`[introspect ${id}]`, err))
+    return { ok: true }
+  } catch (err) {
+    await pool.end().catch(() => {})
+    return { ok: false, error: normalizePgError(err).message, status: 400 }
+  }
+}
+
+// Best-effort: dial every saved connection at boot so the UI shows them as
+// Active without a manual click. Skips ids that already have a pool (a user
+// click could win the race before this finishes).
+export async function autoConnectAll(workspace: string): Promise<void> {
+  const store = new ConnectionStore(workspace)
+  const vault = new CredentialVault(workspace)
+  const connections = await store.list()
+  await Promise.all(
+    connections.map(async (conn) => {
+      if (getPool(conn.id)) return
+      const result = await connectStored(conn.id, store, vault, "claim")
+      if (result.ok) {
+        console.log(`[auto-connect] ${conn.name} (${conn.id})`)
+      } else if (result.error !== "missing_credentials") {
+        console.warn(`[auto-connect] ${conn.name}: ${result.error}`)
+      }
+    }),
+  )
 }
 
 export function connectionsRouter(workspace: string): Hono {
@@ -141,30 +210,10 @@ export function connectionsRouter(workspace: string): Hono {
   router.post("/:id/connect", async (c) => {
     const id = c.req.param("id")
     assertSafeConnectionId(id)
-    const conn = await store.get(id)
-    if (!conn) return c.json({ error: "not_found" }, 404)
-    const password = await vault.getPassword(id)
-    if (password === null) {
-      return c.json({ ok: false, error: "missing_credentials" }, 400)
-    }
-    const pool = createPool(conn, password)
-    try {
-      const client = await pool.connect()
-      try {
-        await client.query("SELECT 1")
-      } finally {
-        client.release()
-      }
-      setPool(id, pool)
-      // Fire-and-forget: seed the schema cache so autocomplete works immediately.
-      void introspect(pool)
-        .then((ns) => writeConnectionSchema(id, ns))
-        .catch((err) => console.warn(`[introspect ${id}]`, err))
-      return c.json({ ok: true })
-    } catch (err) {
-      await pool.end().catch(() => {})
-      return c.json({ ok: false, error: normalizePgError(err).message }, 400)
-    }
+    const result = await connectStored(id, store, vault)
+    if (result.ok) return c.json({ ok: true })
+    if (result.error === "not_found") return c.json({ error: "not_found" }, 404)
+    return c.json({ ok: false, error: result.error }, 400)
   })
 
   router.post("/:id/query", async (c) => {
@@ -184,7 +233,9 @@ export function connectionsRouter(workspace: string): Hono {
     }
     const started = Date.now()
     try {
-      const result = await pool.query({ text: sql, rowMode: "array" })
+      const result = await runWithRetry(pool, (p) =>
+        p.query({ text: sql, rowMode: "array" }),
+      )
       const durationMs = Date.now() - started
       const allRows = Array.isArray(result.rows) ? (result.rows as unknown[][]) : []
       const truncated = allRows.length > MAX_ROWS
@@ -225,7 +276,7 @@ export function connectionsRouter(workspace: string): Hono {
     const pool = getPool(id)
     if (!pool) return c.json({ ok: false, error: "not_connected" }, 409)
     try {
-      const schema = await introspect(pool)
+      const schema = await runWithRetry(pool, (p) => introspect(p), "idempotent")
       await writeConnectionSchema(id, schema)
       return c.json(schema)
     } catch (err) {
