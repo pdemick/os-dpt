@@ -1,0 +1,172 @@
+import { Hono } from "hono"
+import { streamSSE } from "hono/streaming"
+
+import type { AgentEvent } from "@shared/agent.ts"
+
+import { resumeWithAnswer, runAgentTurn } from "../agent/loop.ts"
+import {
+  appendMessage,
+  createChat,
+  deleteChat,
+  getChat,
+  listChats,
+  setTitle,
+} from "../agent/session.ts"
+
+const app = new Hono()
+
+// Serialize work against the same session so two concurrent requests
+// (e.g. a fast double-submit, or /messages racing /respond) don't load
+// divergent in-memory copies and clobber each other on writeAtomic.
+// Local single-user, so contention is near-zero — this is cheap insurance.
+const sessionLocks = new Map<string, Promise<unknown>>()
+
+async function withSessionLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  const prev = sessionLocks.get(id) ?? Promise.resolve()
+  // .catch(() => {}) so a previous chain's rejection doesn't poison ours.
+  const ours = prev.catch(() => {}).then(fn)
+  sessionLocks.set(id, ours)
+  try {
+    return await ours
+  } finally {
+    // Best-effort GC: only delete if no newer caller has chained on us.
+    if (sessionLocks.get(id) === ours) sessionLocks.delete(id)
+  }
+}
+
+app.get("/sessions", async (c) => {
+  const sessions = await listChats()
+  return c.json({ sessions })
+})
+
+app.post("/sessions", async (c) => {
+  const body = await c.req
+    .json<{
+      worksheetSlug?: string
+      connectionId?: string
+      title?: string
+    }>()
+    .catch(() => ({}) as Record<string, never>)
+  const session = await createChat({
+    worksheetSlug: body.worksheetSlug ?? null,
+    connectionId: body.connectionId ?? null,
+    title: body.title ?? null,
+  })
+  return c.json(session, 201)
+})
+
+app.get("/sessions/:id", async (c) => {
+  const session = await getChat(c.req.param("id"))
+  if (!session) return c.json({ error: "not_found" }, 404)
+  return c.json(session)
+})
+
+app.delete("/sessions/:id", async (c) => {
+  await deleteChat(c.req.param("id"))
+  return c.json({ ok: true })
+})
+
+app.post("/sessions/:id/messages", async (c) => {
+  const id = c.req.param("id")
+  const body = await c.req
+    .json<{ message?: string }>()
+    .catch(() => ({}) as { message?: string })
+  const message = typeof body.message === "string" ? body.message.trim() : ""
+  if (message === "") {
+    return c.json({ error: "Missing required field: message" }, 400)
+  }
+  // Pre-check outside the lock so we can return proper 404/409 JSON
+  // before opening the SSE stream. We re-check under the lock too,
+  // because a concurrent request may have advanced state by then.
+  const initial = await getChat(id)
+  if (!initial) return c.json({ error: "not_found" }, 404)
+  if (initial.meta.pending) {
+    return c.json(
+      {
+        error:
+          "Session is waiting on a pending question. POST /respond to answer it first.",
+      },
+      409,
+    )
+  }
+
+  return streamSSE(c, async (stream) => {
+    const emit = async (event: AgentEvent) => {
+      await stream.writeSSE({ data: JSON.stringify(event) })
+    }
+    try {
+      await withSessionLock(id, async () => {
+        // Re-fetch under the lock so we observe writes from any sibling
+        // request that completed while we were queued.
+        const session = await getChat(id)
+        if (!session) {
+          await emit({ type: "error", message: "Session no longer exists." })
+          return
+        }
+        if (session.meta.pending) {
+          await emit({
+            type: "error",
+            message:
+              "Session is waiting on a pending question — answer via /respond first.",
+          })
+          return
+        }
+        // The user message + auto-title are persisted BEFORE the loop
+        // runs. If runAgentTurn throws mid-stream the message is on
+        // disk but the client saw no reply — do NOT add a client-side
+        // retry without checking whether the last persisted user
+        // message matches, or you'll double-append on retry.
+        await appendMessage(session, { role: "user", content: message })
+        if (!session.meta.title) {
+          await setTitle(session, message.slice(0, 60))
+        }
+        await runAgentTurn({ session, emit })
+      })
+    } catch (err) {
+      await emit({ type: "error", message: (err as Error).message })
+    }
+  })
+})
+
+app.post("/sessions/:id/respond", async (c) => {
+  const id = c.req.param("id")
+  const body = await c.req
+    .json<{ answer?: string }>()
+    .catch(() => ({}) as { answer?: string })
+  const answer = typeof body.answer === "string" ? body.answer.trim() : ""
+  if (answer === "") {
+    return c.json({ error: "Missing required field: answer" }, 400)
+  }
+  const initial = await getChat(id)
+  if (!initial) return c.json({ error: "not_found" }, 404)
+  if (!initial.meta.pending) {
+    return c.json({ error: "No pending question to answer." }, 409)
+  }
+
+  return streamSSE(c, async (stream) => {
+    const emit = async (event: AgentEvent) => {
+      await stream.writeSSE({ data: JSON.stringify(event) })
+    }
+    try {
+      await withSessionLock(id, async () => {
+        const session = await getChat(id)
+        if (!session) {
+          await emit({ type: "error", message: "Session no longer exists." })
+          return
+        }
+        if (!session.meta.pending) {
+          await emit({
+            type: "error",
+            message: "No pending question to answer (already resolved).",
+          })
+          return
+        }
+        await resumeWithAnswer({ session, userAnswer: answer, emit })
+      })
+    } catch (err) {
+      await emit({ type: "error", message: (err as Error).message })
+    }
+  })
+})
+
+export default app

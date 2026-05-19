@@ -3,11 +3,16 @@ import path from "node:path"
 import { HTTPException } from "hono/http-exception"
 
 const WORKSHEETS_DIR = "worksheets"
+const CONTEXT_DIR = "context"
 const OSDPT_DIR = ".os-dpt"
 const DRAFTS_DIR = path.join(OSDPT_DIR, "drafts")
+const CHATS_DIR = path.join(OSDPT_DIR, "chats")
 const SESSION_FILE = path.join(OSDPT_DIR, "session.json")
 const SCHEMA_FILE = path.join(OSDPT_DIR, "schema.json")
 const GITIGNORE = ".gitignore"
+
+export const CONTEXT_FILES = ["schemas", "conventions", "feedback"] as const
+export type ContextFile = (typeof CONTEXT_FILES)[number]
 
 let resolved: string | null = null
 
@@ -25,6 +30,8 @@ export async function initWorkspace(argv: string[] = process.argv.slice(2)): Pro
   const root = resolveWorkspace(argv)
   await fs.mkdir(path.join(root, WORKSHEETS_DIR), { recursive: true })
   await fs.mkdir(path.join(root, DRAFTS_DIR), { recursive: true })
+  await fs.mkdir(path.join(root, CHATS_DIR), { recursive: true })
+  await fs.mkdir(path.join(root, CONTEXT_DIR), { recursive: true })
 
   const sessionPath = path.join(root, SESSION_FILE)
   try {
@@ -70,6 +77,10 @@ export const paths = {
   draft: (slug: string) => workspacePath(DRAFTS_DIR, `${slug}.sql`),
   session: () => workspacePath(SESSION_FILE),
   schema: () => workspacePath(SCHEMA_FILE),
+  chats: () => workspacePath(CHATS_DIR),
+  chat: (id: string) => workspacePath(CHATS_DIR, `${id}.json`),
+  context: () => workspacePath(CONTEXT_DIR),
+  contextFile: (name: ContextFile) => workspacePath(CONTEXT_DIR, `${name}.md`),
 }
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-_]*$/i
@@ -77,5 +88,13 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-_]*$/i
 export function assertSafeSlug(slug: string): void {
   if (!SLUG_RE.test(slug) || slug.includes("..") || slug.length > 100) {
     throw new HTTPException(400, { message: `Invalid slug: ${slug}` })
+  }
+}
+
+const CHAT_ID_RE = /^[a-z0-9][a-z0-9-]*$/i
+
+export function assertSafeChatId(id: string): void {
+  if (!CHAT_ID_RE.test(id) || id.includes("..") || id.length > 64) {
+    throw new HTTPException(400, { message: `Invalid chat id: ${id}` })
   }
 }

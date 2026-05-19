@@ -1,8 +1,10 @@
 import { useWorksheets } from "@/hooks/use-worksheets"
+import { useAgent } from "@/lib/agent/context"
 import { CodeMirrorEditor } from "./CodeMirrorEditor"
 
 export function ActiveEditor() {
   const { session, files, schema, updateBuffer, updateCursor, save } = useWorksheets()
+  const { open: openAgent } = useAgent()
   const slug = session.activeSlug
   if (!slug) {
     return (
@@ -28,6 +30,7 @@ export function ActiveEditor() {
         onChange={(v) => updateBuffer(slug, v)}
         onCursorChange={(line, ch, scrollTop) => updateCursor(slug, { line, ch }, scrollTop)}
         onSave={() => void save(slug)}
+        onSlashTrigger={() => void openAgent()}
         schema={schema}
         initialCursor={tab?.cursor}
         initialScrollTop={tab?.scrollTop}

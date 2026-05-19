@@ -10,6 +10,7 @@ import worksheets from "./api/worksheets.ts"
 import drafts from "./api/drafts.ts"
 import session from "./api/session.ts"
 import schema from "./api/schema.ts"
+import agent from "./api/agent.ts"
 
 const workspace = await initWorkspace(process.argv.slice(2))
 
@@ -21,6 +22,7 @@ app.route("/api/worksheets", worksheets)
 app.route("/api/drafts", drafts)
 app.route("/api/session", session)
 app.route("/api/schema", schema)
+app.route("/api/agent", agent)
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) return err.getResponse()

@@ -12,6 +12,8 @@ interface Props {
   onChange: (value: string) => void
   onCursorChange?: (line: number, ch: number, scrollTop: number) => void
   onSave?: () => void
+  /** Called when `/` is pressed at the start of an otherwise-empty line. */
+  onSlashTrigger?: () => void
   schema: SQLNamespace
   initialCursor?: { line: number; ch: number }
   initialScrollTop?: number
@@ -30,6 +32,7 @@ export function CodeMirrorEditor({
   onChange,
   onCursorChange,
   onSave,
+  onSlashTrigger,
   schema,
   initialCursor,
   initialScrollTop,
@@ -41,9 +44,11 @@ export function CodeMirrorEditor({
   // refs so the `extensions` memo only invalidates when `schema` actually changes.
   const onSaveRef = useRef(onSave)
   const onCursorChangeRef = useRef(onCursorChange)
+  const onSlashTriggerRef = useRef(onSlashTrigger)
   useLayoutEffect(() => {
     onSaveRef.current = onSave
     onCursorChangeRef.current = onCursorChange
+    onSlashTriggerRef.current = onSlashTrigger
   })
 
   // The selection is applied on mount via CodeMirror's `selection` prop.
@@ -70,6 +75,21 @@ export function CodeMirrorEditor({
           preventDefault: true,
           run: () => {
             onSaveRef.current?.()
+            return true
+          },
+        },
+        {
+          key: "/",
+          run: (view) => {
+            const handler = onSlashTriggerRef.current
+            if (!handler) return false
+            const head = view.state.selection.main.head
+            const line = view.state.doc.lineAt(head)
+            const before = line.text.slice(0, head - line.from)
+            // Only hijack `/` when the user is at the start of a blank
+            // line — keeps `/*` comments and `/` division untouched.
+            if (before.trim() !== "") return false
+            handler()
             return true
           },
         },
