@@ -107,7 +107,8 @@ The npm package (this repo) and a user's workspace are fully separate concerns:
 
 - pnpm monorepo: `client` + `server` workspaces, root scripts orchestrate both (`pnpm dev` runs Vite + Hono in parallel).
 - **Connections module live**: Hono server on `127.0.0.1:3756`, `/api/connections` (list/create/delete/test/connect/disconnect), AES-256-GCM credential vault in `.os-dpt/credentials.enc`, in-process `pg` pool registry, SIGINT/SIGTERM-driven graceful shutdown. Connections UI rebuilt with Active/Saved sections + Add dialog (Postgres-only).
+- **Worksheets module live**: CodeMirror 6 (Postgres dialect) editor with schema-aware autocomplete from `.os-dpt/schema.json`. Each tab is a `.sql` file in `worksheets/`; `Cmd+S` writes the git-tracked file, debounced autosave keeps a draft in `.os-dpt/drafts/<slug>.sql`. Open tabs / active tab / cursor restored from `.os-dpt/session.json`. Routes: `/api/worksheets`, `/api/drafts`, `/api/session`, `/api/schema`.
 - Shared types live in `shared/`, consumed by both packages via `@shared/*`.
-- Client app shell: `SidebarProvider` + `AppSidebar` with Worksheets / Connections / Settings; Worksheets + Settings views are still blank placeholders.
+- Client app shell: `SidebarProvider` + `AppSidebar` with Worksheets / Connections / Settings; Settings view is still a blank placeholder.
 
-Next: CLI in `cli/` that boots the server and opens the browser; root `package.json` already coordinates the monorepo. Worksheets view + `/api/query` are the next feature.
+Next: CLI in `cli/` that boots the server and opens the browser; root `package.json` already coordinates the monorepo. `/api/query` + results grid and the chat agent are the next features.

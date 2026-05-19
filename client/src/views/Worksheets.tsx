@@ -1,7 +1,24 @@
+import { WorksheetsProvider } from "@/lib/worksheets/context"
+import { WorksheetSidebar } from "@/components/editor/WorksheetSidebar"
+import { WorksheetTabs } from "@/components/editor/WorksheetTabs"
+import { ActiveEditor } from "@/components/editor/ActiveEditor"
+import { StatusBar } from "@/components/editor/StatusBar"
+import { RestoreDraftBanner } from "@/components/editor/RestoreDraftBanner"
+
 export function Worksheets() {
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-semibold">Worksheets</h1>
-    </div>
+    <WorksheetsProvider>
+      <div className="flex min-h-0 flex-1 w-full">
+        <aside className="w-64 shrink-0 border-r border-sidebar-border">
+          <WorksheetSidebar />
+        </aside>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <WorksheetTabs />
+          <RestoreDraftBanner />
+          <ActiveEditor />
+          <StatusBar />
+        </div>
+      </div>
+    </WorksheetsProvider>
   )
 }
