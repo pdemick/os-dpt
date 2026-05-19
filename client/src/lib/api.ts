@@ -1,4 +1,9 @@
 import type {
+  AIProvider,
+  AIProviderId,
+  AIProviderTestResult,
+} from "@shared/ai-providers.ts"
+import type {
   Connection,
   NewConnectionInput,
   TestResult,
@@ -47,4 +52,24 @@ export const api = {
 
   disconnect: (id: string) =>
     request<{ ok: true }>(`/connections/${id}/disconnect`, { method: "POST" }),
+
+  listAIProviders: () =>
+    request<{ providers: AIProvider[] }>("/ai-providers"),
+
+  setAIProviderKey: (id: AIProviderId, apiKey: string) =>
+    request<{ provider: AIProvider }>(`/ai-providers/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ apiKey }),
+    }),
+
+  deleteAIProviderKey: (id: AIProviderId) =>
+    request<{ provider: AIProvider }>(`/ai-providers/${id}`, {
+      method: "DELETE",
+    }),
+
+  testAIProviderKey: (id: AIProviderId, apiKey?: string) =>
+    request<AIProviderTestResult>(`/ai-providers/${id}/test`, {
+      method: "POST",
+      body: JSON.stringify(apiKey ? { apiKey } : {}),
+    }),
 }
