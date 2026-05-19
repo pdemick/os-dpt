@@ -1,0 +1,12 @@
+{
+  "name": "os-dpt",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Local web-based SQL editor with a built-in chat-to-SQL AI agent.",
+  "scripts": {
+    "dev": "pnpm --dir client dev",
+    "build": "pnpm --dir client build",
+    "typecheck": "pnpm --dir client typecheck",
+    "lint": "pnpm --dir client lint"
+  }
+}

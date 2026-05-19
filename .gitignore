@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# os-dpt workspace data — never commit personal queries / creds / context,
+# even if someone runs os-dpt inside the repo by accident.
+/worksheets/
+/connections.json
+/context/
+/.os-dpt/
+
+# Dedicated local workspace for developing os-dpt itself.
+# Run `os-dpt --workspace ./dev-workspace` against this dir.
+/dev-workspace/
