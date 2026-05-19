@@ -1,3 +1,4 @@
+import type * as React from "react"
 import { useState } from "react"
 
 import { AppSidebar, type View } from "@/components/app-sidebar"
@@ -6,7 +7,7 @@ import { Connections } from "@/views/Connections"
 import { Settings } from "@/views/Settings"
 import { Worksheets } from "@/views/Worksheets"
 
-const views: Record<View, () => JSX.Element> = {
+const views: Record<View, React.ComponentType> = {
   worksheets: Worksheets,
   connections: Connections,
   settings: Settings,

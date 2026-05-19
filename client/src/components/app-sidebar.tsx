@@ -1,57 +1,88 @@
-import { Database, FileText, Settings as SettingsIcon } from "lucide-react"
+import * as React from "react"
+import {
+  DatabaseIcon,
+  FileTextIcon,
+  GalleryVerticalEndIcon,
+  Settings2Icon,
+} from "lucide-react"
 
+import { NavUser } from "@/components/nav-user"
+import { TeamSwitcher } from "@/components/team-switcher"
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
-  SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
 } from "@/components/ui/sidebar"
 
 export type View = "worksheets" | "connections" | "settings"
 
-const items: { id: View; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "worksheets", label: "Worksheets", icon: FileText },
-  { id: "connections", label: "Connections", icon: Database },
-  { id: "settings", label: "Settings", icon: SettingsIcon },
+const navItems: {
+  id: View
+  title: string
+  icon: React.ComponentType<{ className?: string }>
+}[] = [
+  { id: "worksheets", title: "Worksheets", icon: FileTextIcon },
+  { id: "connections", title: "Connections", icon: DatabaseIcon },
+  { id: "settings", title: "Settings", icon: Settings2Icon },
 ]
+
+const teams = [
+  {
+    name: "os-dpt",
+    logo: <GalleryVerticalEndIcon />,
+    plan: "Local",
+  },
+]
+
+const user = {
+  name: "you",
+  email: "",
+  avatar: "",
+}
 
 export function AppSidebar({
   view,
   onSelect,
+  ...props
 }: {
   view: View
   onSelect: (v: View) => void
-}) {
+} & Omit<React.ComponentProps<typeof Sidebar>, "onSelect">) {
   return (
-    <Sidebar>
-      <SidebarHeader className="px-4 py-3">
-        <span className="font-semibold">os-dpt</span>
+    <Sidebar collapsible="icon" {...props}>
+      <SidebarHeader>
+        <TeamSwitcher teams={teams} />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    isActive={view === item.id}
-                    onClick={() => onSelect(item.id)}
-                  >
-                    <item.icon />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
+          <SidebarMenu>
+            {navItems.map((item) => (
+              <SidebarMenuItem key={item.id}>
+                <SidebarMenuButton
+                  tooltip={item.title}
+                  isActive={view === item.id}
+                  onClick={() => onSelect(item.id)}
+                >
+                  <item.icon />
+                  <span>{item.title}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <NavUser user={user} />
+      </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   )
 }
