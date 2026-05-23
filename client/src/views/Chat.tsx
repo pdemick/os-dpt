@@ -14,7 +14,7 @@ export function Chat() {
   // Standalone surface: no worksheet binding, so the agent runs SQL and
   // visualizes results (write_sql is withheld server-side for these chats).
   return (
-    <AgentChatProvider worksheetSlug={null}>
+    <AgentChatProvider worksheetSlug={null} standalone>
       <div className="flex min-h-0 flex-1">
         <ChatList />
         <Conversation />

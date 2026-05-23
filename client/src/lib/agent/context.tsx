@@ -138,12 +138,20 @@ export interface AgentChatProviderProps {
    * mirrors it into the editor buffer; standalone surfaces omit it.
    */
   onSqlWritten?: (slug: string, sql: string) => void
+  /**
+   * Marks this as the standalone Chat surface, whose sessions intentionally
+   * carry `worksheetSlug: null`. Distinguishes a real standalone chat from a
+   * side panel that merely has no active worksheet — the latter must not
+   * inherit (or create) standalone chats.
+   */
+  standalone?: boolean
 }
 
 export function AgentChatProvider({
   children,
   worksheetSlug = null,
   onSqlWritten,
+  standalone = false,
 }: AgentChatProviderProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [session, setSession] = useState<ChatSessionMeta | null>(null)
@@ -309,12 +317,15 @@ export function AgentChatProvider({
     [ensureSession],
   )
 
-  // Chats relevant to this surface's binding: a worksheet's chats for the
-  // side panel, or the standalone (null-worksheet) chats for the Chat page.
-  const chatsForActive = useMemo(
-    () => allChats.filter((c) => (c.worksheetSlug ?? null) === (worksheetSlug ?? null)),
-    [allChats, worksheetSlug],
-  )
+  // Chats relevant to this surface's binding: the standalone (null-worksheet)
+  // chats for the Chat page, or the active worksheet's chats for the side
+  // panel. With no active worksheet the panel stays empty rather than falling
+  // back to the standalone chats (which would collide with the Chat page).
+  const chatsForActive = useMemo(() => {
+    if (standalone) return allChats.filter((c) => (c.worksheetSlug ?? null) === null)
+    if (!worksheetSlug) return []
+    return allChats.filter((c) => c.worksheetSlug === worksheetSlug)
+  }, [allChats, standalone, worksheetSlug])
 
   const value = useMemo<AgentContextValue>(
     () => ({
