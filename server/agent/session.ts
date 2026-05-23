@@ -144,6 +144,16 @@ export async function setTitle(session: ChatSession, title: string): Promise<voi
   await persist(session)
 }
 
+/** Bind (or clear) the connection run_sql defaults to for this chat. */
+export async function setConnection(
+  session: ChatSession,
+  connectionId: string | null,
+): Promise<void> {
+  session.meta.connectionId = connectionId
+  session.meta.updatedAt = nowIso()
+  await persist(session)
+}
+
 /** Flush in-memory mutations (e.g. message-block edits) to disk. */
 export async function persistSession(session: ChatSession): Promise<void> {
   session.meta.updatedAt = nowIso()

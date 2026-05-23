@@ -28,6 +28,8 @@ interface AgentContextValue {
   pendingQuestion: string | null
   send(text: string): Promise<void>
   answer(text: string): Promise<void>
+  /** Bind the connection the agent's run_sql targets for this chat. */
+  setConnection(connectionId: string | null): Promise<void>
   /** Past chats whose `worksheetSlug` matches the active worksheet. */
   chatsForActive: ChatSessionMeta[]
   /** Replace the current panel session with the chat at `id`. */
@@ -298,6 +300,15 @@ export function AgentChatProvider({
     [pendingQuestion, session, consume],
   )
 
+  const setConnection = useCallback(
+    async (connectionId: string | null) => {
+      const meta = await ensureSession()
+      const updated = await agentApi.updateSession(meta.id, { connectionId })
+      setSession(updated)
+    },
+    [ensureSession],
+  )
+
   // Chats relevant to this surface's binding: a worksheet's chats for the
   // side panel, or the standalone (null-worksheet) chats for the Chat page.
   const chatsForActive = useMemo(
@@ -317,6 +328,7 @@ export function AgentChatProvider({
       pendingQuestion,
       send,
       answer,
+      setConnection,
       chatsForActive,
       loadSession,
       deleteChat,
@@ -332,6 +344,7 @@ export function AgentChatProvider({
       pendingQuestion,
       send,
       answer,
+      setConnection,
       chatsForActive,
       loadSession,
       deleteChat,

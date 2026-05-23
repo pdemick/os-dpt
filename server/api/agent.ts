@@ -15,6 +15,7 @@ import {
   deleteChat,
   getChat,
   listChats,
+  setConnection,
   setTitle,
 } from "../agent/session.ts"
 
@@ -110,6 +111,27 @@ app.get("/sessions/:id", async (c) => {
   const session = await getChat(c.req.param("id"))
   if (!session) return c.json({ error: "not_found" }, 404)
   return c.json(session)
+})
+
+// Update mutable session bindings (currently just the connection run_sql
+// targets). Returns the updated meta so the client can refresh its badge.
+app.patch("/sessions/:id", async (c) => {
+  const id = c.req.param("id")
+  const body = await c.req
+    .json<{ connectionId?: string | null }>()
+    .catch(() => ({}) as { connectionId?: string | null })
+  return withSessionLock(id, async () => {
+    const session = await getChat(id)
+    if (!session) return c.json({ error: "not_found" }, 404)
+    if ("connectionId" in body) {
+      const cid = body.connectionId
+      if (cid !== null && typeof cid !== "string") {
+        return c.json({ error: "connectionId must be a string or null" }, 400)
+      }
+      await setConnection(session, cid)
+    }
+    return c.json(session.meta)
+  })
 })
 
 app.delete("/sessions/:id", async (c) => {

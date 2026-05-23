@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState } from "react"
+import { ArrowUpIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
+
+import { ChatConnectionPicker } from "./ChatConnectionPicker"
 
 /**
- * Message input shared by the worksheet side panel and the Chat page. Owns its
- * own draft state and routes Enter to `send` (or `answer` when the agent has a
- * pending question). Shift+Enter inserts a newline.
+ * Message input shared by the worksheet side panel and the Chat page. A single
+ * rounded box holds the textarea plus a toolbar row (connection picker + send).
+ * Owns its own draft state and routes Enter to `send` (or `answer` when the
+ * agent has a pending question); Shift+Enter inserts a newline.
  */
 export function Composer({
   pendingQuestion,
@@ -14,7 +19,7 @@ export function Composer({
   send,
   answer,
   autoFocus = true,
-  rows = 3,
+  rows = 2,
 }: {
   pendingQuestion: string | null
   streaming: boolean
@@ -48,7 +53,8 @@ export function Composer({
     }
   }
 
-  const disabled = streaming && !pendingQuestion
+  const inputDisabled = streaming && !pendingQuestion
+  const canSubmit = !inputDisabled && draft.trim() !== ""
   const placeholder = pendingQuestion
     ? "Answer the question…"
     : streaming
@@ -56,24 +62,32 @@ export function Composer({
       : "Ask the agent…"
 
   return (
-    <div className="flex flex-col gap-2">
+    <div
+      className={cn(
+        "rounded-2xl border border-input bg-input/50 transition-[color,box-shadow]",
+        "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30",
+      )}
+    >
       <Textarea
         ref={inputRef}
         rows={rows}
-        className="resize-none text-sm"
+        className="min-h-[2.75rem] resize-none rounded-2xl border-0 bg-transparent px-3 pt-2.5 pb-1 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
-        disabled={disabled}
+        disabled={inputDisabled}
       />
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2 px-2 pb-2">
+        <ChatConnectionPicker />
         <Button
-          size="sm"
+          size="icon"
+          className="size-7 rounded-full"
           onClick={() => void submit()}
-          disabled={disabled || draft.trim() === ""}
+          disabled={!canSubmit}
+          aria-label={pendingQuestion ? "Answer" : "Send"}
         >
-          {pendingQuestion ? "Answer" : "Send"}
+          <ArrowUpIcon className="size-4" />
         </Button>
       </div>
     </div>
