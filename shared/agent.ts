@@ -5,6 +5,35 @@ export type AgentToolName =
   | "ask_user_question"
   | "write_sql"
   | "run_sql"
+  | "render_chart"
+
+/** Chart kinds the agent can render into the chat. */
+export type ChartType = "bar" | "line" | "area" | "pie"
+
+/** One numeric series plotted from a column of the supplied data. */
+export interface ChartSeries {
+  /** Key into each data row holding this series' numeric value. */
+  key: string
+  /** Human-readable label for the legend/tooltip. Defaults to `key`. */
+  label?: string
+}
+
+/**
+ * A self-contained chart the agent renders inline in the chat. The agent
+ * supplies the data rows directly (shaped from its run_sql results), so the
+ * spec carries everything the client needs to draw it.
+ */
+export interface ChartSpec {
+  type: ChartType
+  /** Optional title shown above the chart. */
+  title?: string
+  /** Row key for the category axis (x-axis for bar/line/area; slice label for pie). */
+  x: string
+  /** Series to plot. For pie, only the first series is used (slice value). */
+  series: ChartSeries[]
+  /** Row objects to chart, e.g. `[{ month: "Jan", revenue: 120 }, …]`. */
+  data: Record<string, unknown>[]
+}
 
 export interface ChatSessionMeta {
   id: string
@@ -67,6 +96,7 @@ export type AgentEvent =
       summary: string
     }
   | { type: "sql_written"; worksheetSlug: string; sql: string }
+  | { type: "chart_rendered"; spec: ChartSpec }
   | { type: "ask_user"; toolUseId: string; question: string }
   | { type: "usage"; entry: UsageEntry; totals: UsageTotals }
   | { type: "done" }

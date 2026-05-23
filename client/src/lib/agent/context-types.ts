@@ -1,4 +1,4 @@
-import type { AgentToolName } from "@shared/agent"
+import type { AgentToolName, ChartSpec } from "@shared/agent"
 
 export type TranscriptItem =
   | { id: string; kind: "user"; text: string }
@@ -12,5 +12,6 @@ export type TranscriptItem =
       summary: string
     }
   | { id: string; kind: "sql_written"; worksheetSlug: string; length: number }
+  | { id: string; kind: "chart"; spec: ChartSpec }
   | { id: string; kind: "ask_user"; toolUseId: string; question: string }
   | { id: string; kind: "error"; message: string }

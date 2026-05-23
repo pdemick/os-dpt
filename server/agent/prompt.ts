@@ -2,6 +2,8 @@ import type { ChatSession } from "./session.ts"
 
 export function buildSystemPrompt(session: ChatSession): string {
   const { worksheetSlug, connectionId } = session.meta
+  const bound = !!worksheetSlug
+
   const lines: string[] = [
     "You are os-dpt's chat-to-SQL agent. You help the user explore and query their database from a local SQL editor.",
     "",
@@ -12,15 +14,36 @@ export function buildSystemPrompt(session: ChatSession): string {
     "  - schemas.md  → facts about tables and columns",
     "  - conventions.md → how the team writes SQL or what business terms mean",
     "  - feedback.md → corrections from the user, or errors from run_sql and what they imply.",
-    "- Prefer iterating: write_sql → run_sql → inspect → write_sql again. Drafts are non-destructive; the user commits with Cmd+S.",
+  ]
+
+  if (bound) {
+    lines.push(
+      "- Prefer iterating: write_sql → run_sql → inspect → write_sql again. Drafts are non-destructive; the user commits with Cmd+S.",
+    )
+  } else {
+    lines.push(
+      "- This chat is a standalone explore-and-visualize surface with no worksheet attached. You cannot stage SQL into an editor (write_sql is unavailable). Run read-only SELECTs with run_sql and present findings with render_chart and concise prose. If the user wants to keep a query, tell them to open a worksheet.",
+    )
+  }
+
+  lines.push(
     "- Keep prose terse. The user sees your tool calls in the UI; do not narrate every step.",
     "",
     "Tool usage notes:",
-    "- write_sql stages the full worksheet contents into a draft (overwrite, not patch). Always include the complete query.",
+  )
+
+  if (bound) {
+    lines.push(
+      "- write_sql stages the full worksheet contents into a draft (overwrite, not patch). Always include the complete query.",
+    )
+  }
+
+  lines.push(
     "- run_sql results are capped to 50 rows by default; add LIMIT or aggregation if you need a broader view.",
     "- run_sql executes whatever SQL you pass, including DDL and DML, against the role the user connected with. Treat exploration as read-only — use SELECT. Before any INSERT/UPDATE/DELETE/TRUNCATE/CREATE/DROP/ALTER, call ask_user_question to confirm.",
     "- ask_user_question pauses the loop entirely — only one question per call, and use it sparingly.",
-  ]
+    "- render_chart draws a chart inline in the chat. After run_sql, when a picture beats a table (trends → line/area, comparisons → bar, proportions → pie), call it with pre-aggregated rows. Pass the data inline, shaped to small row objects (e.g. {month, revenue}); don't dump raw wide rows.",
+  )
 
   const ctx: string[] = []
   if (worksheetSlug) ctx.push(`- Active worksheet: ${worksheetSlug}`)
@@ -30,7 +53,7 @@ export function buildSystemPrompt(session: ChatSession): string {
   } else {
     lines.push(
       "",
-      "No worksheet or connection is bound to this chat. Ask the user before writing or running SQL.",
+      "No worksheet or connection is bound to this chat. Ask the user before running SQL.",
     )
   }
 

@@ -1,4 +1,4 @@
-import type { AgentToolName } from "@shared/agent"
+import type { AgentToolName, ChartSpec } from "@shared/agent"
 
 import type { TranscriptItem } from "./context-types"
 
@@ -41,6 +41,13 @@ export function hydrateMessages(messages: unknown): TranscriptItem[] {
         if (!block || typeof block !== "object") continue
         if (block.type === "text" && typeof block.text === "string") {
           out.push({ id: rid(), kind: "assistant_text", text: block.text })
+        } else if (block.type === "tool_use" && block.name === "render_chart") {
+          // Replay charts from the stored tool input so reloaded chats keep
+          // their visualizations instead of a bare "render_chart" tool row.
+          const spec = block.input as ChartSpec | undefined
+          if (spec && Array.isArray(spec.data) && Array.isArray(spec.series)) {
+            out.push({ id: rid(), kind: "chart", spec })
+          }
         } else if (block.type === "tool_use") {
           out.push({
             id: rid(),

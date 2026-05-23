@@ -11,8 +11,6 @@ import type { ReactNode } from "react"
 
 import type { AgentEvent, ChatSessionMeta } from "@shared/agent"
 
-import { useWorksheets } from "@/hooks/use-worksheets"
-
 import { agentApi } from "./api"
 import type { TranscriptItem } from "./context-types"
 import { hydrateMessages } from "./hydrate"
@@ -95,6 +93,8 @@ function apply(items: TranscriptItem[], event: AgentEvent): TranscriptItem[] {
           length: event.sql.length,
         },
       ]
+    case "chart_rendered":
+      return [...items, { id: rid(), kind: "chart", spec: event.spec }]
     case "ask_user":
       return [
         ...items,
@@ -107,6 +107,10 @@ function apply(items: TranscriptItem[], event: AgentEvent): TranscriptItem[] {
       ]
     case "error":
       return [...items, { id: rid(), kind: "error", message: event.message }]
+    case "usage":
+      // Usage/cost is tracked separately (use-worksheet-usage); it produces
+      // no transcript row. Handled here to keep the switch exhaustive.
+      return items
     case "done":
       return items
     default: {
@@ -119,8 +123,26 @@ function apply(items: TranscriptItem[], event: AgentEvent): TranscriptItem[] {
   }
 }
 
-export function AgentChatProvider({ children }: { children: ReactNode }) {
-  const { session: editorSession, updateBuffer } = useWorksheets()
+export interface AgentChatProviderProps {
+  children: ReactNode
+  /**
+   * Worksheet new chats bind to. `null`/omitted makes this a standalone
+   * surface (the Chat page) — sessions carry no worksheet and the agent's
+   * write_sql tool is withheld server-side.
+   */
+  worksheetSlug?: string | null
+  /**
+   * Called when the agent stages SQL via write_sql. The worksheet side panel
+   * mirrors it into the editor buffer; standalone surfaces omit it.
+   */
+  onSqlWritten?: (slug: string, sql: string) => void
+}
+
+export function AgentChatProvider({
+  children,
+  worksheetSlug = null,
+  onSqlWritten,
+}: AgentChatProviderProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [session, setSession] = useState<ChatSessionMeta | null>(null)
   const [items, setItems] = useState<TranscriptItem[]>([])
@@ -128,10 +150,10 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null)
   const [allChats, setAllChats] = useState<ChatSessionMeta[]>([])
 
-  // ref for the active worksheet slug so consume() picks up the live value
-  // when the user has switched tabs mid-conversation.
-  const activeSlugRef = useRef(editorSession.activeSlug)
-  activeSlugRef.current = editorSession.activeSlug
+  // ref for the bound worksheet slug so consume()/newChat() pick up the live
+  // value when the user has switched tabs mid-conversation.
+  const activeSlugRef = useRef(worksheetSlug)
+  activeSlugRef.current = worksheetSlug
 
   const refreshChats = useCallback(async () => {
     try {
@@ -142,22 +164,22 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Load chats once the provider mounts, and re-load when the active
+  // Load chats once the provider mounts, and re-load when the bound
   // worksheet changes (the filtered view is what feeds the panel).
   useEffect(() => {
     void refreshChats()
-  }, [refreshChats, editorSession.activeSlug])
+  }, [refreshChats, worksheetSlug])
 
   const ensureSession = useCallback(async (): Promise<ChatSessionMeta> => {
     if (session) return session
     const connectionId = await firstActiveConnectionId()
     const res = await agentApi.createSession({
-      worksheetSlug: editorSession.activeSlug,
+      worksheetSlug,
       connectionId,
     })
     setSession(res.meta)
     return res.meta
-  }, [session, editorSession.activeSlug])
+  }, [session, worksheetSlug])
 
   const consume = useCallback(
     async (stream: AsyncGenerator<AgentEvent>) => {
@@ -165,7 +187,7 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
         for await (const event of stream) {
           setItems((prev) => apply(prev, event))
           if (event.type === "sql_written") {
-            updateBuffer(event.worksheetSlug, event.sql)
+            onSqlWritten?.(event.worksheetSlug, event.sql)
           }
           if (event.type === "ask_user") {
             setPendingQuestion(event.question)
@@ -177,7 +199,7 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
         setStreaming(false)
       }
     },
-    [updateBuffer],
+    [onSqlWritten],
   )
 
   const open = useCallback(async () => {
@@ -276,12 +298,11 @@ export function AgentChatProvider({ children }: { children: ReactNode }) {
     [pendingQuestion, session, consume],
   )
 
+  // Chats relevant to this surface's binding: a worksheet's chats for the
+  // side panel, or the standalone (null-worksheet) chats for the Chat page.
   const chatsForActive = useMemo(
-    () =>
-      editorSession.activeSlug
-        ? allChats.filter((c) => c.worksheetSlug === editorSession.activeSlug)
-        : [],
-    [allChats, editorSession.activeSlug],
+    () => allChats.filter((c) => (c.worksheetSlug ?? null) === (worksheetSlug ?? null)),
+    [allChats, worksheetSlug],
   )
 
   const value = useMemo<AgentContextValue>(

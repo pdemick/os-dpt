@@ -28,6 +28,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-resizable-panels": "^4.11.1",
+    "recharts": "^3.8.1",
     "shadcn": "^4.7.0",
     "sql-formatter": "^15.8.0",
     "streamdown": "^2.5.0",
