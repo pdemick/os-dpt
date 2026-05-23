@@ -8,6 +8,7 @@ import {
   type UsageTotals,
 } from "@shared/agent.ts"
 
+import { activeIds } from "../db/registry.ts"
 import { resumeWithAnswer, runAgentTurn } from "../agent/loop.ts"
 import {
   appendMessage,
@@ -127,6 +128,11 @@ app.patch("/sessions/:id", async (c) => {
       const cid = body.connectionId
       if (cid !== null && typeof cid !== "string") {
         return c.json({ error: "connectionId must be a string or null" }, 400)
+      }
+      // run_sql needs a live pool, so only an active connection can be bound.
+      // The picker only offers active ones; reject anything else defensively.
+      if (cid !== null && !activeIds().has(cid)) {
+        return c.json({ error: "connection is not active" }, 400)
       }
       await setConnection(session, cid)
     }
