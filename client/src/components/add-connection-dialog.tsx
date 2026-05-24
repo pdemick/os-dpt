@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useId, useRef, useState } from "react"
 import type { ReactNode } from "react"
 
 import type { AccessMode, Connection, NewConnectionInput } from "@shared/connections.ts"
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { api } from "@/lib/api"
 
 type FormState = {
@@ -258,44 +259,30 @@ function Field({
   )
 }
 
-const ACCESS_MODES: { mode: AccessMode; label: string }[] = [
-  { mode: "read-write", label: "Read & write" },
-  { mode: "read-only", label: "Read-only" },
-]
-
-// Two-button segmented control for picking a connection's access mode. Shared
-// by the add dialog and the connection list so both read the same way.
+// Switch for picking a connection's access mode. On = read-only (off is the
+// read-write default). Shared by the add dialog and the connection list so
+// both read the same way.
 export function AccessModeToggle({
   value,
   onChange,
   disabled,
-  size = "sm",
 }: {
   value: AccessMode
   onChange: (mode: AccessMode) => void
   disabled?: boolean
-  size?: "sm" | "xs"
 }) {
+  const id = useId()
   return (
-    <div
-      role="group"
-      aria-label="Access mode"
-      className="inline-flex w-fit gap-0.5 rounded-md border border-border p-0.5"
-    >
-      {ACCESS_MODES.map(({ mode, label }) => (
-        <Button
-          key={mode}
-          type="button"
-          size={size}
-          variant={value === mode ? "secondary" : "ghost"}
-          className="rounded-sm"
-          aria-pressed={value === mode}
-          disabled={disabled}
-          onClick={() => onChange(mode)}
-        >
-          {label}
-        </Button>
-      ))}
+    <div className="flex items-center gap-2">
+      <Switch
+        id={id}
+        checked={value === "read-only"}
+        onCheckedChange={(checked) => onChange(checked ? "read-only" : "read-write")}
+        disabled={disabled}
+      />
+      <Label htmlFor={id} className="font-normal text-muted-foreground">
+        Read-only
+      </Label>
     </div>
   )
 }

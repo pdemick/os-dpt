@@ -209,7 +209,6 @@ function ConnectionRow({
           value={conn.accessMode}
           onChange={onAccessMode}
           disabled={busy}
-          size="xs"
         />
         {conn.active ? (
           <Button
