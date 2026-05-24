@@ -2,9 +2,12 @@ import { useCallback, useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import { DatabaseIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
-import type { Connection } from "@shared/connections.ts"
+import type { AccessMode, Connection } from "@shared/connections.ts"
 
-import { AddConnectionDialog } from "@/components/add-connection-dialog"
+import {
+  AccessModeToggle,
+  AddConnectionDialog,
+} from "@/components/add-connection-dialog"
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
 import { useAppIntent } from "@/lib/app-intents"
@@ -73,6 +76,21 @@ export function Connections() {
     setConnections((prev) => prev.filter((c) => c.id !== id))
   }
 
+  const handleAccessMode = async (id: string, accessMode: AccessMode) => {
+    setBusyId(id)
+    setError(null)
+    const result = await api.updateConnection(id, { accessMode })
+    setBusyId(null)
+    if (!result.ok) {
+      setError(result.error)
+    }
+    // Refresh regardless of outcome: the server persists the new mode before
+    // recreating the pool, so even on a failed reconnect (which drops the pool)
+    // the stored mode and active state have changed. Skipping the refresh would
+    // leave the row showing the old mode and a stale "active" badge.
+    void refresh()
+  }
+
   const active = connections.filter((c) => c.active)
   const saved = connections.filter((c) => !c.active)
 
@@ -116,6 +134,7 @@ export function Connections() {
                   busy={busyId === conn.id}
                   onDisconnect={() => handleDisconnect(conn.id)}
                   onDelete={() => handleDelete(conn.id)}
+                  onAccessMode={(mode) => handleAccessMode(conn.id, mode)}
                 />
               ))
             )}
@@ -134,6 +153,7 @@ export function Connections() {
                   busy={busyId === conn.id}
                   onConnect={() => handleConnect(conn.id)}
                   onDelete={() => handleDelete(conn.id)}
+                  onAccessMode={(mode) => handleAccessMode(conn.id, mode)}
                 />
               ))
             )}
@@ -176,6 +196,7 @@ type RowProps = {
   onConnect?: () => void
   onDisconnect?: () => void
   onDelete: () => void
+  onAccessMode: (mode: AccessMode) => void
 }
 
 function ConnectionRow({
@@ -184,6 +205,7 @@ function ConnectionRow({
   onConnect,
   onDisconnect,
   onDelete,
+  onAccessMode,
 }: RowProps) {
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
@@ -200,6 +222,11 @@ function ConnectionRow({
         </span>
       </div>
       <div className="flex items-center gap-2">
+        <AccessModeToggle
+          value={conn.accessMode}
+          onChange={onAccessMode}
+          disabled={busy}
+        />
         {conn.active ? (
           <Button
             size="sm"

@@ -1,7 +1,7 @@
-import { useRef, useState } from "react"
+import { useId, useRef, useState } from "react"
 import type { ReactNode } from "react"
 
-import type { Connection, NewConnectionInput } from "@shared/connections.ts"
+import type { AccessMode, Connection, NewConnectionInput } from "@shared/connections.ts"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { api } from "@/lib/api"
 
 type FormState = {
@@ -24,6 +25,7 @@ type FormState = {
   user: string
   password: string
   ssl: boolean
+  accessMode: AccessMode
 }
 
 const emptyForm: FormState = {
@@ -34,6 +36,7 @@ const emptyForm: FormState = {
   user: "",
   password: "",
   ssl: false,
+  accessMode: "read-write",
 }
 
 function toInput(form: FormState): NewConnectionInput {
@@ -46,6 +49,7 @@ function toInput(form: FormState): NewConnectionInput {
     user: form.user.trim(),
     password: form.password,
     ssl: form.ssl,
+    accessMode: form.accessMode,
   }
 }
 
@@ -195,6 +199,19 @@ export function AddConnectionDialog({ open, onOpenChange, onCreated }: Props) {
             Use SSL
           </label>
 
+          <Field label="Access" htmlFor="conn-access">
+            <AccessModeToggle
+              id="conn-access"
+              value={form.accessMode}
+              onChange={(mode) => update("accessMode", mode)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {form.accessMode === "read-only"
+                ? "Guards against accidental writes — sessions open read-only by default."
+                : "Queries can read and modify data."}
+            </p>
+          </Field>
+
           {message && (
             <p
               className={
@@ -239,6 +256,40 @@ function Field({
     <div className="grid gap-1.5">
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
+    </div>
+  )
+}
+
+// Switch for picking a connection's access mode. On = write access
+// (read-write, the default); off = read-only. Framed positively so flipping
+// the switch on grants a capability rather than imposing a restriction. Shared
+// by the add dialog and the connection list so both read the same way.
+export function AccessModeToggle({
+  value,
+  onChange,
+  disabled,
+  id: idProp,
+}: {
+  value: AccessMode
+  onChange: (mode: AccessMode) => void
+  disabled?: boolean
+  // Optional so a wrapping <Field> label can associate with the switch; falls
+  // back to a generated id when used standalone (e.g. the connection list row).
+  id?: string
+}) {
+  const generatedId = useId()
+  const id = idProp ?? generatedId
+  return (
+    <div className="flex items-center gap-2">
+      <Switch
+        id={id}
+        checked={value === "read-write"}
+        onCheckedChange={(checked) => onChange(checked ? "read-write" : "read-only")}
+        disabled={disabled}
+      />
+      <Label htmlFor={id} className="font-normal text-muted-foreground">
+        Write access
+      </Label>
     </div>
   )
 }

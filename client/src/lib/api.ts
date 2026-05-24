@@ -4,6 +4,7 @@ import type {
   AIProviderTestResult,
 } from "@shared/ai-providers.ts"
 import type {
+  AccessMode,
   Connection,
   NewConnectionInput,
   TestResult,
@@ -40,6 +41,12 @@ export const api = {
     request<TestResult>("/connections/test", {
       method: "POST",
       body: JSON.stringify(input),
+    }),
+
+  updateConnection: (id: string, patch: { accessMode: AccessMode }) =>
+    request<{ connection: Connection }>(`/connections/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
     }),
 
   deleteConnection: (id: string) =>
