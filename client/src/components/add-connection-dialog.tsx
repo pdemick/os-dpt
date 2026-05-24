@@ -259,9 +259,10 @@ function Field({
   )
 }
 
-// Switch for picking a connection's access mode. On = read-only (off is the
-// read-write default). Shared by the add dialog and the connection list so
-// both read the same way.
+// Switch for picking a connection's access mode. On = write access
+// (read-write, the default); off = read-only. Framed positively so flipping
+// the switch on grants a capability rather than imposing a restriction. Shared
+// by the add dialog and the connection list so both read the same way.
 export function AccessModeToggle({
   value,
   onChange,
@@ -276,12 +277,12 @@ export function AccessModeToggle({
     <div className="flex items-center gap-2">
       <Switch
         id={id}
-        checked={value === "read-only"}
-        onCheckedChange={(checked) => onChange(checked ? "read-only" : "read-write")}
+        checked={value === "read-write"}
+        onCheckedChange={(checked) => onChange(checked ? "read-write" : "read-only")}
         disabled={disabled}
       />
       <Label htmlFor={id} className="font-normal text-muted-foreground">
-        Read-only
+        Write access
       </Label>
     </div>
   )
