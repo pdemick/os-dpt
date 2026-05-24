@@ -1,8 +1,10 @@
 export type Driver = "postgres"
 
-// Whether os-dpt allows writes through a connection. "read-only" is enforced at
-// the Postgres session level (default_transaction_read_only), so the database
-// itself rejects INSERT/UPDATE/DELETE/DDL — not just a client-side guess.
+// Whether os-dpt allows writes through a connection. "read-only" sets the
+// Postgres session default (default_transaction_read_only), so the database
+// rejects plain INSERT/UPDATE/DELETE/DDL — a guard against accidental writes
+// rather than a hard boundary (a session can opt back into writes; see
+// server/db/postgres.ts).
 export type AccessMode = "read-write" | "read-only"
 
 export type Connection = {

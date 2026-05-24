@@ -66,6 +66,9 @@ function parseInput(body: unknown): NewConnectionInput {
     user: requireStr(b.user, "user"),
     password: typeof b.password === "string" ? b.password : "",
     ssl: Boolean(b.ssl),
+    // Lenient by design: anything that isn't an explicit "read-only" defaults to
+    // "read-write" (the safe default for new/legacy input). PATCH, by contrast,
+    // is a deliberate change and validates strictly.
     accessMode: b.accessMode === "read-only" ? "read-only" : "read-write",
   }
 }
