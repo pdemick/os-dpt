@@ -1,5 +1,6 @@
 import * as React from "react"
 import {
+  BookOpenIcon,
   DatabaseIcon,
   FileTextIcon,
   GalleryVerticalEndIcon,
@@ -22,7 +23,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 
-export type View = "worksheets" | "connections" | "chat" | "settings"
+export type View = "worksheets" | "connections" | "chat" | "documentation" | "settings"
 
 const navItems: {
   id: View
@@ -32,6 +33,7 @@ const navItems: {
   { id: "worksheets", title: "Worksheets", icon: FileTextIcon },
   { id: "connections", title: "Connections", icon: DatabaseIcon },
   { id: "chat", title: "Chat", icon: SparklesIcon },
+  { id: "documentation", title: "Documentation", icon: BookOpenIcon },
   { id: "settings", title: "Settings", icon: Settings2Icon },
 ]
 

@@ -12,6 +12,7 @@ import session from "./api/session.ts"
 import schema from "./api/schema.ts"
 import history from "./api/history.ts"
 import agent from "./api/agent.ts"
+import context from "./api/context.ts"
 import { closeHistoryDb, openHistoryDb } from "./history/db.ts"
 import { startWorksheetsWatcher, stopWorksheetsWatcher } from "./history/watcher.ts"
 
@@ -30,6 +31,7 @@ app.route("/api/session", session)
 app.route("/api/schema", schema)
 app.route("/api/history", history)
 app.route("/api/agent", agent)
+app.route("/api/context", context)
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) return err.getResponse()
