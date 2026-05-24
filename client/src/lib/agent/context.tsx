@@ -32,6 +32,11 @@ interface AgentContextValue {
   setConnection(connectionId: string | null): Promise<void>
   /** Past chats whose `worksheetSlug` matches the active worksheet. */
   chatsForActive: ChatSessionMeta[]
+  /**
+   * True when this is the worksheet panel but no worksheet is active, so the
+   * agent runs read-only (write_sql withheld). Surfaces help text in the UI.
+   */
+  exploreOnly: boolean
   /** Replace the current panel session with the chat at `id`. */
   loadSession(id: string): Promise<void>
   /** Delete a stored chat. If it's the active session, reset the panel. */
@@ -186,10 +191,11 @@ export function AgentChatProvider({
     const res = await agentApi.createSession({
       worksheetSlug,
       connectionId,
+      standalone,
     })
     setSession(res.meta)
     return res.meta
-  }, [session, worksheetSlug])
+  }, [session, worksheetSlug, standalone])
 
   const consume = useCallback(
     async (stream: AsyncGenerator<AgentEvent>) => {
@@ -234,10 +240,11 @@ export function AgentChatProvider({
     const res = await agentApi.createSession({
       worksheetSlug: activeSlugRef.current,
       connectionId,
+      standalone,
     })
     setSession(res.meta)
     await refreshChats()
-  }, [session, refreshChats])
+  }, [session, refreshChats, standalone])
 
   const loadSession = useCallback(
     async (id: string) => {
@@ -322,10 +329,15 @@ export function AgentChatProvider({
   // panel. With no active worksheet the panel stays empty rather than falling
   // back to the standalone chats (which would collide with the Chat page).
   const chatsForActive = useMemo(() => {
-    if (standalone) return allChats.filter((c) => (c.worksheetSlug ?? null) === null)
+    if (standalone) return allChats.filter((c) => c.standalone)
     if (!worksheetSlug) return []
-    return allChats.filter((c) => c.worksheetSlug === worksheetSlug)
+    return allChats.filter((c) => !c.standalone && c.worksheetSlug === worksheetSlug)
   }, [allChats, standalone, worksheetSlug])
+
+  // The worksheet panel with no active worksheet: the agent runs read-only
+  // (write_sql is withheld server-side because worksheetSlug is null). The
+  // Chat page (standalone) frames this in its own UI, so it's excluded here.
+  const exploreOnly = !standalone && !worksheetSlug
 
   const value = useMemo<AgentContextValue>(
     () => ({
@@ -341,6 +353,7 @@ export function AgentChatProvider({
       answer,
       setConnection,
       chatsForActive,
+      exploreOnly,
       loadSession,
       deleteChat,
     }),
@@ -357,6 +370,7 @@ export function AgentChatProvider({
       answer,
       setConnection,
       chatsForActive,
+      exploreOnly,
       loadSession,
       deleteChat,
     ],

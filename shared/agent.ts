@@ -41,6 +41,15 @@ export interface ChatSessionMeta {
   updatedAt: string
   title: string | null
   worksheetSlug: string | null
+  /**
+   * True only for sessions created from the standalone Chat page. Used to
+   * categorize history: the Chat page lists its own (`standalone`) sessions,
+   * the worksheet panel lists sessions bound to the active worksheet. A panel
+   * chat started with no active worksheet is `standalone: false` with a null
+   * `worksheetSlug` — explore-only (no write_sql) but kept out of the Chat
+   * page's history. Tool/prompt behavior keys on `worksheetSlug`, not this.
+   */
+  standalone: boolean
   connectionId: string | null
   pending: PendingAsk | null
   usage: UsageEntry[]

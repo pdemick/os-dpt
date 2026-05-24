@@ -98,12 +98,14 @@ app.post("/sessions", async (c) => {
       worksheetSlug?: string
       connectionId?: string
       title?: string
+      standalone?: boolean
     }>()
     .catch(() => ({}) as Record<string, never>)
   const session = await createChat({
     worksheetSlug: body.worksheetSlug ?? null,
     connectionId: body.connectionId ?? null,
     title: body.title ?? null,
+    standalone: body.standalone ?? false,
   })
   return c.json(session, 201)
 })

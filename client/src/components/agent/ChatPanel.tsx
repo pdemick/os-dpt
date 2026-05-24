@@ -8,7 +8,7 @@ import { Composer } from "./Composer"
 import { Transcript } from "./Transcript"
 
 export function ChatPanel() {
-  const { isOpen, close, newChat, items, streaming, pendingQuestion, send, answer } =
+  const { isOpen, close, newChat, items, streaming, pendingQuestion, send, answer, exploreOnly } =
     useAgent()
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -40,12 +40,23 @@ export function ChatPanel() {
         </div>
       </header>
 
+      {exploreOnly && (
+        <div className="border-b bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+          No worksheet open — the agent can explore and chart, but can't write SQL.
+          Open a worksheet to let it stage queries.
+        </div>
+      )}
+
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         <Transcript
           items={items}
           streaming={streaming}
           pendingQuestion={pendingQuestion}
-          emptyState="Ask about the schema, or describe a query and the agent will write SQL into the current worksheet draft."
+          emptyState={
+            exploreOnly
+              ? "Ask about the schema or explore your data. Open a worksheet and the agent can write SQL into it."
+              : "Ask about the schema, or describe a query and the agent will write SQL into the current worksheet draft."
+          }
         />
       </div>
 

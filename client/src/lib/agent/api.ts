@@ -9,6 +9,8 @@ export interface CreateSessionInput {
   worksheetSlug?: string | null
   connectionId?: string | null
   title?: string | null
+  /** Marks a Chat-page session; see ChatSessionMeta.standalone. */
+  standalone?: boolean
 }
 
 export interface WorksheetUsageSession {

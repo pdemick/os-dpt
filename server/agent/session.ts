@@ -24,6 +24,8 @@ export interface CreateChatInput {
   worksheetSlug?: string | null
   connectionId?: string | null
   title?: string | null
+  /** Marks a Chat-page session; see ChatSessionMeta.standalone. */
+  standalone?: boolean
 }
 
 function nowIso(): string {
@@ -38,6 +40,7 @@ function freshMeta(input: CreateChatInput): ChatSessionMeta {
     updatedAt: now,
     title: input.title ?? null,
     worksheetSlug: input.worksheetSlug ?? null,
+    standalone: input.standalone ?? false,
     connectionId: input.connectionId ?? null,
     pending: null,
     usage: [],
@@ -52,6 +55,9 @@ function freshMeta(input: CreateChatInput): ChatSessionMeta {
 function ensureUsageFields(session: ChatSession): ChatSession {
   if (!Array.isArray(session.meta.usage)) session.meta.usage = []
   if (!session.meta.totals) session.meta.totals = emptyTotals()
+  // Sessions predating the standalone flag are all worksheet-panel origin
+  // (the Chat page is newer); default them to non-standalone.
+  if (typeof session.meta.standalone !== "boolean") session.meta.standalone = false
   return session
 }
 
