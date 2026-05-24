@@ -48,10 +48,11 @@ Created on first run in the user's **current directory**. `os-dpt` treats the cw
 │   └── credentials.enc       # AES-GCM blob; key lives in OS keychain
 ├── worksheets/               # git-tracked SQL worksheets, one file per worksheet
 │   └── <slug>.sql
-├── context/                  # git-tracked agent memory (markdown)
-│   ├── schemas.md
+├── context/                  # git-tracked agent memory (markdown), scoped per data source
+│   ├── schemas.md            # "unassigned" set — used when no connection is bound
 │   ├── conventions.md
-│   └── feedback.md
+│   ├── feedback.md
+│   └── by-source/<conn-id>/  # per-connection docs (schemas/conventions/feedback.md)
 ├── connections.json          # connection metadata (host, port, db, user) — no secrets
 └── .gitignore                # ensures .os-dpt/ is excluded
 ```
@@ -71,7 +72,9 @@ Rule of thumb: anything sensitive lives in `.os-dpt/` and is gitignored. Anythin
 - The `Use SSL` checkbox on a connection sets `ssl: { rejectUnauthorized: false }` — traffic is encrypted, but the server certificate is **not** verified. This is intentional for v1 to avoid breaking against self-signed dev/staging hosts; a future `sslmode` field can opt into verification.
 
 ### Agent memory
-- The agent's "learning" is just markdown files in `context/`. The `write_context` tool appends or edits these; `get_context` reads them into the prompt.
+- The agent's "learning" is just markdown files in `context/`. The `update_context` tool appends or edits these; `get_context` reads them into the prompt.
+- Context is **scoped per data source**: docs live in `context/by-source/<connection-id>/` and `get_context`/`update_context` target the connection bound to the chat. With no connection bound they fall back to the workspace-root "unassigned" set (`context/*.md`).
+- The **Documentation** view (left sidebar) exposes these docs for humans to read/edit, with a data-source filter that switches between the unassigned set and each connection. Backed by `/api/context` (`connectionId` query param).
 - Because they're git-tracked, the user sees a full diff every time the agent updates its understanding, and can revert.
 
 ### SQL worksheets as files

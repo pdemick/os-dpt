@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs"
 
 import { writeAtomic } from "../../lib/fs-atomic.ts"
-import { CONTEXT_FILES, type ContextFile, paths } from "../../workspace.ts"
+import { CONTEXT_FILES, type ContextFile, isSafeConnectionId, paths } from "../../workspace.ts"
 
 import type { AgentTool } from "./index.ts"
 
@@ -21,7 +21,9 @@ export const updateContextTool: AgentTool = {
     "Write to one of the agent's context files (schemas.md, conventions.md, feedback.md). " +
     "Use this whenever you learn something durable: a clarified schema fact, a project convention, " +
     "a user correction, or an error pattern from running SQL. Prefer 'append' for new findings; " +
-    "use 'replace' only when restructuring an entire file.",
+    "use 'replace' only when restructuring an entire file. " +
+    "Writes are scoped to the data source bound to this chat; with no connection bound they go to " +
+    "the workspace-level (unassigned) docs.",
   input_schema: {
     type: "object",
     required: ["file", "mode", "content"],
@@ -43,8 +45,10 @@ export const updateContextTool: AgentTool = {
       },
     },
   },
-  async execute(rawInput) {
+  async execute(rawInput, ctx) {
     const input = (rawInput ?? {}) as Input
+    const bound = ctx.session.meta.connectionId
+    const connectionId = bound && isSafeConnectionId(bound) ? bound : null
     if (typeof input.file !== "string" || !isContextFile(input.file)) {
       return {
         toolResult: `Invalid file: must be one of ${CONTEXT_FILES.join(", ")}`,
@@ -67,7 +71,7 @@ export const updateContextTool: AgentTool = {
       }
     }
 
-    const target = paths.contextFile(input.file)
+    const target = paths.contextFile(input.file, connectionId)
     let next: string
     if (input.mode === "replace") {
       next = input.content.endsWith("\n") ? input.content : input.content + "\n"

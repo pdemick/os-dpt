@@ -8,7 +8,6 @@ import { EditorView, keymap } from "@codemirror/view"
 import type { SQLNamespace } from "@shared/types"
 import { useResolvedTheme } from "@/hooks/use-resolved-theme"
 import { onInsertAtCursor } from "@/lib/editor-bus"
-import { slashMenuExtension } from "./slash-menu/extension"
 import { statementAtCursor } from "@/lib/sql/statement-at-cursor"
 
 interface Props {
@@ -61,7 +60,7 @@ export function CodeMirrorEditor({
   const [initialSelection] = useState(() =>
     initialCursor
       ? { anchor: cursorToOffset(value, initialCursor.line, initialCursor.ch) }
-      : undefined,
+      : undefined
   )
 
   const extensions = useMemo(
@@ -101,9 +100,8 @@ export function CodeMirrorEditor({
               return true
             },
           },
-        ]),
+        ])
       ),
-      slashMenuExtension(schema),
       EditorView.updateListener.of((u) => {
         const cb = onCursorChangeRef.current
         if (!cb) return
@@ -117,7 +115,7 @@ export function CodeMirrorEditor({
         }
       }),
     ],
-    [schema],
+    [schema]
   )
 
   useEffect(() => {
@@ -156,9 +154,9 @@ export function CodeMirrorEditor({
         highlightActiveLine: true,
         bracketMatching: true,
         closeBrackets: true,
-        // Our slash menu owns identifier completion; the built-in CM
-        // autocomplete would double-render on top of it.
-        autocompletion: false,
+        // Built-in schema-aware completion (driven by the sql({ schema })
+        // extension above) handles identifier autocomplete as you type.
+        autocompletion: true,
         foldGutter: true,
       }}
       height="100%"

@@ -2,8 +2,13 @@ import { promises as fs } from "node:fs"
 import path from "node:path"
 import { HTTPException } from "hono/http-exception"
 
+import { CONTEXT_DOC_NAMES, type ContextDocName } from "@shared/context.ts"
+
 const WORKSHEETS_DIR = "worksheets"
 const CONTEXT_DIR = "context"
+// Per-data-source context docs live under context/by-source/<connection-id>/;
+// docs with no connection bound stay at the context/ root (the "unassigned" set).
+const CONTEXT_BY_SOURCE = "by-source"
 const OSDPT_DIR = ".os-dpt"
 const DRAFTS_DIR = path.join(OSDPT_DIR, "drafts")
 const CHATS_DIR = path.join(OSDPT_DIR, "chats")
@@ -13,8 +18,10 @@ const SCHEMA_FILE = path.join(OSDPT_DIR, "schema.json")
 const HISTORY_FILE = path.join(OSDPT_DIR, "history.db")
 const GITIGNORE = ".gitignore"
 
-export const CONTEXT_FILES = ["schemas", "conventions", "feedback"] as const
-export type ContextFile = (typeof CONTEXT_FILES)[number]
+// Canonical context-doc set lives in shared/context.ts; re-exported here under
+// the names the agent tools already import.
+export const CONTEXT_FILES = CONTEXT_DOC_NAMES
+export type ContextFile = ContextDocName
 
 let resolved: string | null = null
 
@@ -89,7 +96,16 @@ export const paths = {
   chats: () => workspacePath(CHATS_DIR),
   chat: (id: string) => workspacePath(CHATS_DIR, `${id}.json`),
   context: () => workspacePath(CONTEXT_DIR),
-  contextFile: (name: ContextFile) => workspacePath(CONTEXT_DIR, `${name}.md`),
+  // `connectionId` scopes docs to a data source; null/undefined → the
+  // workspace-root "unassigned" set.
+  contextDir: (connectionId?: string | null) =>
+    connectionId
+      ? workspacePath(CONTEXT_DIR, CONTEXT_BY_SOURCE, connectionId)
+      : workspacePath(CONTEXT_DIR),
+  contextFile: (name: ContextFile, connectionId?: string | null) =>
+    connectionId
+      ? workspacePath(CONTEXT_DIR, CONTEXT_BY_SOURCE, connectionId, `${name}.md`)
+      : workspacePath(CONTEXT_DIR, `${name}.md`),
 }
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-_]*$/i
@@ -105,5 +121,19 @@ const CHAT_ID_RE = /^[a-z0-9][a-z0-9-]*$/i
 export function assertSafeChatId(id: string): void {
   if (!CHAT_ID_RE.test(id) || id.includes("..") || id.length > 64) {
     throw new HTTPException(400, { message: `Invalid chat id: ${id}` })
+  }
+}
+
+// Connection ids are server-minted UUIDs; reject anything else before it's
+// interpolated into a filesystem path (context/by-source/<id>/…).
+const CONNECTION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export function isSafeConnectionId(id: string): boolean {
+  return CONNECTION_ID_RE.test(id)
+}
+
+export function assertSafeConnectionId(id: string): void {
+  if (!isSafeConnectionId(id)) {
+    throw new HTTPException(400, { message: `Invalid connection id` })
   }
 }

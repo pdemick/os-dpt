@@ -10,6 +10,7 @@ import {
 } from "@/components/add-connection-dialog"
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
+import { useAppIntent } from "@/lib/app-intents"
 
 export function Connections() {
   const [connections, setConnections] = useState<Connection[]>([])
@@ -30,8 +31,17 @@ export function Connections() {
     void refresh()
   }, [refresh])
 
+  // "New connection" quick action opens the add dialog once mounted here.
+  useAppIntent(
+    "new-connection",
+    useCallback(() => setDialogOpen(true), [])
+  )
+
   const handleCreated = (connection: Connection) => {
-    setConnections((prev) => [...prev.filter((c) => c.id !== connection.id), connection])
+    setConnections((prev) => [
+      ...prev.filter((c) => c.id !== connection.id),
+      connection,
+    ])
   }
 
   const handleConnect = async (id: string) => {
@@ -39,7 +49,9 @@ export function Connections() {
     const result = await api.connect(id)
     setBusyId(null)
     if (!result.ok || result.data.ok === false) {
-      const msg = !result.ok ? result.error : result.data.error ?? "Failed to connect"
+      const msg = !result.ok
+        ? result.error
+        : (result.data.error ?? "Failed to connect")
       setError(msg)
       return
     }
@@ -111,7 +123,9 @@ export function Connections() {
         <div className="flex flex-col gap-6">
           <Section title="Active" count={active.length}>
             {active.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No active connections.</p>
+              <p className="text-sm text-muted-foreground">
+                No active connections.
+              </p>
             ) : (
               active.map((conn) => (
                 <ConnectionRow
@@ -128,7 +142,9 @@ export function Connections() {
 
           <Section title="Saved" count={saved.length}>
             {saved.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No saved connections.</p>
+              <p className="text-sm text-muted-foreground">
+                No saved connections.
+              </p>
             ) : (
               saved.map((conn) => (
                 <ConnectionRow
@@ -244,7 +260,9 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
     <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border p-12 text-center">
       <DatabaseIcon className="size-8 text-muted-foreground" />
       <div>
-        <p className="text-sm font-medium text-foreground">No connections yet</p>
+        <p className="text-sm font-medium text-foreground">
+          No connections yet
+        </p>
         <p className="text-sm text-muted-foreground">
           Add a Postgres connection to start querying.
         </p>
