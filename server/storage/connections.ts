@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs"
 import path from "node:path"
 
-import type { Driver } from "@shared/connections.ts"
+import type { AccessMode, Driver } from "@shared/connections.ts"
 
 export type StoredConnection = {
   id: string
@@ -12,7 +12,17 @@ export type StoredConnection = {
   database: string
   user: string
   ssl: boolean
+  accessMode: AccessMode
   createdAt: string
+}
+
+// Connections written before accessMode existed have no field; treat them as
+// read-write so upgrading the app never silently revokes write access.
+function normalize(conn: StoredConnection): StoredConnection {
+  return {
+    ...conn,
+    accessMode: conn.accessMode === "read-only" ? "read-only" : "read-write",
+  }
 }
 
 const FILE = "connections.json"
@@ -38,7 +48,7 @@ export class ConnectionStore {
     try {
       const raw = await fs.readFile(this.filePath, "utf8")
       const data = JSON.parse(raw) as { connections?: StoredConnection[] }
-      return Array.isArray(data.connections) ? data.connections : []
+      return Array.isArray(data.connections) ? data.connections.map(normalize) : []
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return []
       throw err
@@ -61,6 +71,22 @@ export class ConnectionStore {
     return this.enqueue(async () => {
       const existing = await this.list()
       await this.write(existing.filter((c) => c.id !== id))
+    })
+  }
+
+  // Apply a partial patch to one connection's metadata. Returns the updated
+  // record, or null if no connection has that id. id/createdAt are immutable.
+  update(
+    id: string,
+    patch: Partial<Omit<StoredConnection, "id" | "createdAt">>,
+  ): Promise<StoredConnection | null> {
+    return this.enqueue(async () => {
+      const existing = await this.list()
+      const current = existing.find((c) => c.id === id)
+      if (!current) return null
+      const updated = normalize({ ...current, ...patch, id: current.id })
+      await this.write(existing.map((c) => (c.id === id ? updated : c)))
+      return updated
     })
   }
 

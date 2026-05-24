@@ -1,7 +1,7 @@
 import { useRef, useState } from "react"
 import type { ReactNode } from "react"
 
-import type { Connection, NewConnectionInput } from "@shared/connections.ts"
+import type { AccessMode, Connection, NewConnectionInput } from "@shared/connections.ts"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -24,6 +24,7 @@ type FormState = {
   user: string
   password: string
   ssl: boolean
+  accessMode: AccessMode
 }
 
 const emptyForm: FormState = {
@@ -34,6 +35,7 @@ const emptyForm: FormState = {
   user: "",
   password: "",
   ssl: false,
+  accessMode: "read-write",
 }
 
 function toInput(form: FormState): NewConnectionInput {
@@ -46,6 +48,7 @@ function toInput(form: FormState): NewConnectionInput {
     user: form.user.trim(),
     password: form.password,
     ssl: form.ssl,
+    accessMode: form.accessMode,
   }
 }
 
@@ -195,6 +198,18 @@ export function AddConnectionDialog({ open, onOpenChange, onCreated }: Props) {
             Use SSL
           </label>
 
+          <Field label="Access" htmlFor="conn-access">
+            <AccessModeToggle
+              value={form.accessMode}
+              onChange={(mode) => update("accessMode", mode)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {form.accessMode === "read-only"
+                ? "Postgres rejects any write through this connection."
+                : "Queries can read and modify data."}
+            </p>
+          </Field>
+
           {message && (
             <p
               className={
@@ -239,6 +254,48 @@ function Field({
     <div className="grid gap-1.5">
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
+    </div>
+  )
+}
+
+const ACCESS_MODES: { mode: AccessMode; label: string }[] = [
+  { mode: "read-write", label: "Read & write" },
+  { mode: "read-only", label: "Read-only" },
+]
+
+// Two-button segmented control for picking a connection's access mode. Shared
+// by the add dialog and the connection list so both read the same way.
+export function AccessModeToggle({
+  value,
+  onChange,
+  disabled,
+  size = "sm",
+}: {
+  value: AccessMode
+  onChange: (mode: AccessMode) => void
+  disabled?: boolean
+  size?: "sm" | "xs"
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Access mode"
+      className="inline-flex w-fit gap-0.5 rounded-md border border-border p-0.5"
+    >
+      {ACCESS_MODES.map(({ mode, label }) => (
+        <Button
+          key={mode}
+          type="button"
+          size={size}
+          variant={value === mode ? "secondary" : "ghost"}
+          className="rounded-sm"
+          aria-pressed={value === mode}
+          disabled={disabled}
+          onClick={() => onChange(mode)}
+        >
+          {label}
+        </Button>
+      ))}
     </div>
   )
 }

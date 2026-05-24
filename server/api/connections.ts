@@ -4,7 +4,7 @@ import { promises as fs } from "node:fs"
 import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
 
-import type { Connection, NewConnectionInput } from "@shared/connections.ts"
+import type { AccessMode, Connection, NewConnectionInput } from "@shared/connections.ts"
 import type { QueryOk, SQLNamespace } from "@shared/types.ts"
 
 import { CredentialVault } from "../credentials/vault.ts"
@@ -66,6 +66,7 @@ function parseInput(body: unknown): NewConnectionInput {
     user: requireStr(b.user, "user"),
     password: typeof b.password === "string" ? b.password : "",
     ssl: Boolean(b.ssl),
+    accessMode: b.accessMode === "read-only" ? "read-only" : "read-write",
   }
 }
 
@@ -164,11 +165,41 @@ export function connectionsRouter(workspace: string): Hono {
       database: input.database,
       user: input.user,
       ssl: input.ssl,
+      accessMode: input.accessMode,
       createdAt: new Date().toISOString(),
     }
     await store.add(stored)
     if (input.password) await vault.setPassword(stored.id, input.password)
     return c.json({ connection: toApi(stored, activeIds()) }, 201)
+  })
+
+  router.patch("/:id", async (c) => {
+    const id = c.req.param("id")
+    assertSafeConnectionId(id)
+    let accessMode: AccessMode
+    try {
+      const body = (await c.req.json()) as { accessMode?: unknown }
+      if (body.accessMode !== "read-only" && body.accessMode !== "read-write") {
+        return c.json({ error: "accessMode must be 'read-only' or 'read-write'" }, 400)
+      }
+      accessMode = body.accessMode
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400)
+    }
+    const updated = await store.update(id, { accessMode })
+    if (!updated) return c.json({ error: "not_found" }, 404)
+    // If the connection is live, recreate its pool so the new mode applies now;
+    // the read-only GUC is fixed at connection startup. If the reconnect fails,
+    // drop the pool rather than leave a write-capable session mislabeled
+    // read-only.
+    if (getPool(id)) {
+      const result = await connectStored(id, store, vault)
+      if (!result.ok) {
+        await removePool(id)
+        return c.json({ ok: false, error: result.error }, 400)
+      }
+    }
+    return c.json({ connection: toApi(updated, activeIds()) })
   })
 
   router.delete("/:id", async (c) => {
@@ -197,6 +228,7 @@ export function connectionsRouter(workspace: string): Hono {
       database: input.database,
       user: input.user,
       ssl: input.ssl,
+      accessMode: input.accessMode,
       createdAt: new Date().toISOString(),
     }
     try {
