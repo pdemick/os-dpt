@@ -43,7 +43,7 @@ export async function runAgentTurn(opts: RunOptions): Promise<void> {
     return
   }
   const system = buildSystemPrompt(session)
-  const tools = anthropicToolDefs()
+  const tools = anthropicToolDefs({ worksheetBound: !!session.meta.worksheetSlug })
 
   for (let step = 0; step < MAX_STEPS; step += 1) {
     let final: Anthropic.Message

@@ -8,6 +8,7 @@ import {
   type UsageTotals,
 } from "@shared/agent.ts"
 
+import { activeIds } from "../db/registry.ts"
 import { resumeWithAnswer, runAgentTurn } from "../agent/loop.ts"
 import {
   appendMessage,
@@ -15,6 +16,7 @@ import {
   deleteChat,
   getChat,
   listChats,
+  setConnection,
   setTitle,
 } from "../agent/session.ts"
 
@@ -96,12 +98,14 @@ app.post("/sessions", async (c) => {
       worksheetSlug?: string
       connectionId?: string
       title?: string
+      standalone?: boolean
     }>()
     .catch(() => ({}) as Record<string, never>)
   const session = await createChat({
     worksheetSlug: body.worksheetSlug ?? null,
     connectionId: body.connectionId ?? null,
     title: body.title ?? null,
+    standalone: body.standalone ?? false,
   })
   return c.json(session, 201)
 })
@@ -110,6 +114,32 @@ app.get("/sessions/:id", async (c) => {
   const session = await getChat(c.req.param("id"))
   if (!session) return c.json({ error: "not_found" }, 404)
   return c.json(session)
+})
+
+// Update mutable session bindings (currently just the connection run_sql
+// targets). Returns the updated meta so the client can refresh its badge.
+app.patch("/sessions/:id", async (c) => {
+  const id = c.req.param("id")
+  const body = await c.req
+    .json<{ connectionId?: string | null }>()
+    .catch(() => ({}) as { connectionId?: string | null })
+  return withSessionLock(id, async () => {
+    const session = await getChat(id)
+    if (!session) return c.json({ error: "not_found" }, 404)
+    if ("connectionId" in body) {
+      const cid = body.connectionId
+      if (cid !== null && typeof cid !== "string") {
+        return c.json({ error: "connectionId must be a string or null" }, 400)
+      }
+      // run_sql needs a live pool, so only an active connection can be bound.
+      // The picker only offers active ones; reject anything else defensively.
+      if (cid !== null && !activeIds().has(cid)) {
+        return c.json({ error: "connection is not active" }, 400)
+      }
+      await setConnection(session, cid)
+    }
+    return c.json(session.meta)
+  })
 })
 
 app.delete("/sessions/:id", async (c) => {

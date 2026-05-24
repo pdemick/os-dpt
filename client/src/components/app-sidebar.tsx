@@ -3,6 +3,7 @@ import {
   DatabaseIcon,
   FileTextIcon,
   GalleryVerticalEndIcon,
+  SparklesIcon,
   Settings2Icon,
 } from "lucide-react"
 
@@ -21,7 +22,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 
-export type View = "worksheets" | "connections" | "settings"
+export type View = "worksheets" | "connections" | "chat" | "settings"
 
 const navItems: {
   id: View
@@ -30,6 +31,7 @@ const navItems: {
 }[] = [
   { id: "worksheets", title: "Worksheets", icon: FileTextIcon },
   { id: "connections", title: "Connections", icon: DatabaseIcon },
+  { id: "chat", title: "Chat", icon: SparklesIcon },
   { id: "settings", title: "Settings", icon: Settings2Icon },
 ]
 

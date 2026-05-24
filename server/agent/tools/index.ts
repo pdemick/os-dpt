@@ -34,6 +34,7 @@ import { getSchemaTool } from "./get_schema.ts"
 import { askUserQuestionTool } from "./ask_user_question.ts"
 import { writeSqlTool } from "./write_sql.ts"
 import { runSqlTool } from "./run_sql.ts"
+import { renderChartTool } from "./render_chart.ts"
 
 export const TOOLS: AgentTool[] = [
   getContextTool,
@@ -42,6 +43,7 @@ export const TOOLS: AgentTool[] = [
   askUserQuestionTool,
   writeSqlTool,
   runSqlTool,
+  renderChartTool,
 ]
 
 const TOOL_BY_NAME: Record<string, AgentTool> = Object.fromEntries(
@@ -52,8 +54,18 @@ export function findTool(name: string): AgentTool | undefined {
   return TOOL_BY_NAME[name]
 }
 
-export function anthropicToolDefs(): Anthropic.Tool[] {
-  return TOOLS.map((t) => ({
+export interface ToolDefOptions {
+  /**
+   * When false, worksheet-targeting tools (write_sql) are withheld — used by
+   * standalone chat sessions that have no worksheet to stage SQL into.
+   * Defaults to true.
+   */
+  worksheetBound?: boolean
+}
+
+export function anthropicToolDefs(opts: ToolDefOptions = {}): Anthropic.Tool[] {
+  const { worksheetBound = true } = opts
+  return TOOLS.filter((t) => worksheetBound || t.name !== "write_sql").map((t) => ({
     name: t.name,
     description: t.description,
     input_schema: t.input_schema,

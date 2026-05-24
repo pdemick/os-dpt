@@ -1,4 +1,4 @@
-import type { AgentToolName } from "@shared/agent"
+import type { AgentToolName, ChartSpec } from "@shared/agent"
 
 import type { TranscriptItem } from "./context-types"
 
@@ -42,14 +42,24 @@ export function hydrateMessages(messages: unknown): TranscriptItem[] {
         if (block.type === "text" && typeof block.text === "string") {
           out.push({ id: rid(), kind: "assistant_text", text: block.text })
         } else if (block.type === "tool_use") {
-          out.push({
-            id: rid(),
-            kind: "tool",
-            toolUseId: block.id,
-            name: block.name as AgentToolName,
-            status: "ok",
-            summary: "",
-          })
+          // Replay charts from the stored tool input so reloaded chats keep
+          // their visualizations instead of a bare "render_chart" tool row.
+          // A malformed spec falls through to the generic tool row below so
+          // the call is still visible rather than silently dropped.
+          const spec =
+            block.name === "render_chart" ? (block.input as ChartSpec | undefined) : undefined
+          if (spec && Array.isArray(spec.data) && Array.isArray(spec.series)) {
+            out.push({ id: rid(), kind: "chart", spec })
+          } else {
+            out.push({
+              id: rid(),
+              kind: "tool",
+              toolUseId: block.id,
+              name: block.name as AgentToolName,
+              status: "ok",
+              summary: "",
+            })
+          }
         }
       }
     }

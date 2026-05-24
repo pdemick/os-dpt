@@ -9,6 +9,8 @@ export interface CreateSessionInput {
   worksheetSlug?: string | null
   connectionId?: string | null
   title?: string | null
+  /** Marks a Chat-page session; see ChatSessionMeta.standalone. */
+  standalone?: boolean
 }
 
 export interface WorksheetUsageSession {
@@ -55,6 +57,18 @@ export const agentApi = {
 
   getSession: async (id: string): Promise<ChatSessionResponse> =>
     jsonOrThrow(await fetch(`/api/agent/sessions/${encodeURIComponent(id)}`)),
+
+  updateSession: async (
+    id: string,
+    patch: { connectionId?: string | null },
+  ): Promise<ChatSessionMeta> =>
+    jsonOrThrow(
+      await fetch(`/api/agent/sessions/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(patch),
+      }),
+    ),
 
   deleteSession: async (id: string): Promise<void> => {
     await fetch(`/api/agent/sessions/${encodeURIComponent(id)}`, {
