@@ -5,6 +5,7 @@ import { AppSidebar, type View } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Chat } from "@/views/Chat"
 import { Connections } from "@/views/Connections"
+import { Documentation } from "@/views/Documentation"
 import { Settings } from "@/views/Settings"
 import { Worksheets } from "@/views/Worksheets"
 
@@ -12,6 +13,7 @@ const views: Record<View, React.ComponentType> = {
   worksheets: Worksheets,
   connections: Connections,
   chat: Chat,
+  documentation: Documentation,
   settings: Settings,
 }
 
