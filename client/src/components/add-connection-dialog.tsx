@@ -201,12 +201,13 @@ export function AddConnectionDialog({ open, onOpenChange, onCreated }: Props) {
 
           <Field label="Access" htmlFor="conn-access">
             <AccessModeToggle
+              id="conn-access"
               value={form.accessMode}
               onChange={(mode) => update("accessMode", mode)}
             />
             <p className="text-xs text-muted-foreground">
               {form.accessMode === "read-only"
-                ? "Postgres rejects any write through this connection."
+                ? "Guards against accidental writes — sessions open read-only by default."
                 : "Queries can read and modify data."}
             </p>
           </Field>
@@ -267,12 +268,17 @@ export function AccessModeToggle({
   value,
   onChange,
   disabled,
+  id: idProp,
 }: {
   value: AccessMode
   onChange: (mode: AccessMode) => void
   disabled?: boolean
+  // Optional so a wrapping <Field> label can associate with the switch; falls
+  // back to a generated id when used standalone (e.g. the connection list row).
+  id?: string
 }) {
-  const id = useId()
+  const generatedId = useId()
+  const id = idProp ?? generatedId
   return (
     <div className="flex items-center gap-2">
       <Switch

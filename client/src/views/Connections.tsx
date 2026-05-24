@@ -71,10 +71,11 @@ export function Connections() {
     setBusyId(null)
     if (!result.ok) {
       setError(result.error)
-      return
     }
-    // The server may have reconnected an active pool; refresh to reflect mode
-    // (and any change in active state).
+    // Refresh regardless of outcome: the server persists the new mode before
+    // recreating the pool, so even on a failed reconnect (which drops the pool)
+    // the stored mode and active state have changed. Skipping the refresh would
+    // leave the row showing the old mode and a stale "active" badge.
     void refresh()
   }
 

@@ -11,9 +11,14 @@ function clientConfig(conn: StoredConnection, password: string) {
     password,
     ssl: conn.ssl ? { rejectUnauthorized: false } : false,
     // For read-only connections, set the GUC in the startup packet so every
-    // session this pool opens is read-only from its first statement. Postgres
-    // then rejects any write (INSERT/UPDATE/DELETE/DDL) with SQLSTATE 25006 —
-    // enforcement lives in the database, not in fragile client-side SQL parsing.
+    // session this pool opens defaults to read-only. Postgres then rejects plain
+    // writes (INSERT/UPDATE/DELETE/DDL) with SQLSTATE 25006 — a guard against
+    // *accidental* writes that needs no client-side SQL parsing.
+    //
+    // Not a hard boundary: default_transaction_read_only is a USERSET GUC, so a
+    // session can re-enable writes with `SET default_transaction_read_only=off`
+    // or `BEGIN READ WRITE`. For a true read-only guarantee, connect as a DB
+    // role that lacks write privileges (or point at a read replica).
     ...(conn.accessMode === "read-only"
       ? { options: "-c default_transaction_read_only=on" }
       : {}),
