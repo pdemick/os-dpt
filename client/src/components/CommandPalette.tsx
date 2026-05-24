@@ -1,16 +1,13 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
-  Columns2,
-  Database,
-  FileText,
-  Sparkles,
-  Table,
-  Wand2,
+  DatabaseIcon,
+  FilePlus2Icon,
+  MessageSquarePlusIcon,
+  PlusIcon,
+  Settings2Icon,
 } from "lucide-react"
 
-import type { Connection } from "@shared/connections"
-import type { WorksheetSearchHit } from "@shared/types"
-
+import type { View } from "@/components/app-sidebar"
 import {
   Command,
   CommandDialog,
@@ -19,263 +16,124 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandShortcut,
 } from "@/components/ui/command"
-import { useWorksheets } from "@/hooks/use-worksheets"
-import { useAgent } from "@/lib/agent/context"
-import { emitInsertAtCursor } from "@/lib/editor-bus"
-import { flattenSchema, type SchemaEntry } from "@/lib/schema/flatten"
-import { formatSql } from "@/lib/sql/format"
-import { api } from "@/lib/worksheets/api"
-import { useConnections } from "@/lib/worksheets/connections"
+import { emitAppIntent } from "@/lib/app-intents"
+import { formatShortcut, matchesShortcut, type Shortcut } from "@/lib/shortcuts"
 
-type Mode = "menu" | "agent"
+type QuickAction = {
+  id: string
+  label: string
+  icon: React.ComponentType
+  shortcut: Shortcut
+  /** View to navigate to. */
+  view: View
+  /** Intent fired after navigating, if the action also creates something. */
+  intent?: "new-editor" | "new-chat" | "new-connection"
+}
 
-const SCHEMA_RESULT_CAP = 25
+const QUICK_ACTIONS: QuickAction[] = [
+  {
+    id: "new-chat",
+    label: "New chat",
+    icon: MessageSquarePlusIcon,
+    shortcut: { mod: true, shift: true, key: "c" },
+    view: "chat",
+    intent: "new-chat",
+  },
+  {
+    id: "new-editor",
+    label: "New editor",
+    icon: FilePlus2Icon,
+    shortcut: { mod: true, shift: true, key: "e" },
+    view: "worksheets",
+    intent: "new-editor",
+  },
+  {
+    id: "connections",
+    label: "Connections",
+    icon: DatabaseIcon,
+    shortcut: { mod: true, shift: true, key: "d" },
+    view: "connections",
+  },
+  {
+    id: "new-connection",
+    label: "New connection",
+    icon: PlusIcon,
+    shortcut: { mod: true, shift: true, key: "a" },
+    view: "connections",
+    intent: "new-connection",
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: Settings2Icon,
+    shortcut: { mod: true, key: "," },
+    view: "settings",
+  },
+]
 
-export function CommandPalette() {
+const TOGGLE: Shortcut = { mod: true, key: "k" }
+
+// Global quick-action bar (⌘K). Lives at the app shell so its actions can
+// navigate to any view; cross-view creation is dispatched via the intent bus.
+export function CommandPalette({
+  onNavigate,
+}: {
+  onNavigate: (view: View) => void
+}) {
   const [open, setOpen] = useState(false)
-  const [mode, setMode] = useState<Mode>("menu")
-  const [query, setQuery] = useState("")
 
-  const { session, files, list, openTab, updateBuffer } = useWorksheets()
-  const { open: openAgentPanel, send: sendAgent } = useAgent()
-  const { active: activeConns } = useConnections()
+  const run = useCallback(
+    (action: QuickAction) => {
+      setOpen(false)
+      onNavigate(action.view)
+      if (action.intent) emitAppIntent(action.intent)
+    },
+    [onNavigate]
+  )
 
-  // Cmd/Ctrl+K toggles the palette globally.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      if (matchesShortcut(e, TOGGLE)) {
         e.preventDefault()
         setOpen((o) => !o)
+        return
+      }
+      for (const action of QUICK_ACTIONS) {
+        if (matchesShortcut(e, action.shortcut)) {
+          e.preventDefault()
+          run(action)
+          return
+        }
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [])
-
-  // Reset mode + query whenever the palette closes so the next open starts clean.
-  useEffect(() => {
-    if (!open) {
-      setMode("menu")
-      setQuery("")
-    }
-  }, [open])
-
-  // Debounced worksheet search; empty query falls back to the recent list
-  // so the palette is useful even before the user types anything.
-  const [worksheetHits, setWorksheetHits] = useState<WorksheetSearchHit[]>([])
-  useEffect(() => {
-    if (!open || mode !== "menu") return
-    const q = query.trim()
-    if (q === "") {
-      setWorksheetHits(list.slice(0, 8).map((m) => ({ slug: m.slug, name: m.name, snippet: "" })))
-      return
-    }
-    const handle = setTimeout(async () => {
-      try {
-        setWorksheetHits(await api.searchWorksheets(q))
-      } catch {
-        setWorksheetHits([])
-      }
-    }, 120)
-    return () => clearTimeout(handle)
-  }, [open, mode, query, list])
-
-  // Preload schemas for every active connection on first open of a session
-  // so schema-search returns hits with no per-keystroke fetch.
-  const [schemasByConn, setSchemasByConn] = useState<Record<string, SchemaEntry[]>>({})
-  useEffect(() => {
-    if (!open) return
-    let cancelled = false
-    ;(async () => {
-      const results = await Promise.all(
-        activeConns.map(async (c) => {
-          try {
-            const raw = await api.getConnectionSchema(c.id)
-            return [c.id, flattenSchema(raw)] as const
-          } catch {
-            return [c.id, [] as SchemaEntry[]] as const
-          }
-        }),
-      )
-      if (cancelled) return
-      const next: Record<string, SchemaEntry[]> = {}
-      for (const [id, entries] of results) next[id] = entries
-      setSchemasByConn(next)
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [open, activeConns])
-
-  const schemaHits = useMemo(() => {
-    if (mode !== "menu") return []
-    const q = query.trim().toLowerCase()
-    if (q === "") return []
-    const out: { conn: Connection; entry: SchemaEntry }[] = []
-    outer: for (const conn of activeConns) {
-      const entries = schemasByConn[conn.id] ?? []
-      for (const entry of entries) {
-        if (
-          entry.qualified.toLowerCase().includes(q) ||
-          entry.leaf.toLowerCase().includes(q)
-        ) {
-          out.push({ conn, entry })
-          if (out.length >= SCHEMA_RESULT_CAP) break outer
-        }
-      }
-    }
-    return out
-  }, [mode, query, activeConns, schemasByConn])
-
-  const showAgentAction = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return q === "" || "claude".startsWith(q) || "agent".startsWith(q) || q.includes("ask")
-  }, [query])
-
-  const showFormatAction = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (q === "") return true
-    return ["format", "autoformat", "lowercase", "lower", "comma"].some((kw) =>
-      kw.includes(q),
-    )
-  }, [query])
-
-  const close = () => setOpen(false)
-
-  const enterAgentMode = () => {
-    setMode("agent")
-    setQuery("")
-  }
-
-  const submitAgentPrompt = async () => {
-    const text = query.trim()
-    if (text === "") return
-    close()
-    await openAgentPanel()
-    await sendAgent(text)
-  }
-
-  const runAutoformat = () => {
-    const slug = session.activeSlug
-    if (!slug) return
-    const file = files[slug]
-    if (!file) return
-    try {
-      const formatted = formatSql(file.buffer)
-      updateBuffer(slug, formatted)
-    } catch {
-      // Malformed SQL — leave the buffer untouched rather than mangling it.
-    }
-    close()
-  }
-
-  const openWorksheetHit = async (slug: string) => {
-    close()
-    await openTab(slug)
-  }
-
-  const insertSchemaEntry = (entry: SchemaEntry) => {
-    close()
-    emitInsertAtCursor(entry.qualified)
-  }
+  }, [run])
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <Command shouldFilter={false} loop>
-        <CommandInput
-          value={query}
-          onValueChange={setQuery}
-          placeholder={
-            mode === "agent"
-              ? "Describe what you want the agent to do — press Enter to send"
-              : "Search worksheets, schema, or type \"agent\" / \"format\"…"
-          }
-          onKeyDown={(e) => {
-            if (mode === "agent" && e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault()
-              void submitAgentPrompt()
-            }
-            if (mode === "agent" && e.key === "Escape") {
-              setMode("menu")
-              setQuery("")
-            }
-          }}
-        />
-        {mode === "menu" && (
-          <CommandList>
-            <CommandEmpty>No results.</CommandEmpty>
-
-            {(showAgentAction || showFormatAction) && (
-              <CommandGroup heading="Actions">
-                {showAgentAction && (
-                  <CommandItem value="action:agent" onSelect={enterAgentMode}>
-                    <Sparkles />
-                    <span className="flex-1">Ask agent…</span>
-                    <span className="text-xs text-muted-foreground">claude · agent</span>
-                  </CommandItem>
-                )}
-                {showFormatAction && (
-                  <CommandItem
-                    value="action:autoformat"
-                    onSelect={runAutoformat}
-                    disabled={!session.activeSlug}
-                  >
-                    <Wand2 />
-                    <span className="flex-1">Autoformat worksheet</span>
-                    <span className="text-xs text-muted-foreground">lowercase · leading commas</span>
-                  </CommandItem>
-                )}
-              </CommandGroup>
-            )}
-
-            {worksheetHits.length > 0 && (
-              <CommandGroup
-                heading={query.trim() === "" ? "Recent worksheets" : "Worksheets"}
+      <Command loop>
+        <CommandInput placeholder="Type a command…" />
+        <CommandList>
+          <CommandEmpty>No matching action.</CommandEmpty>
+          <CommandGroup heading="Quick actions">
+            {QUICK_ACTIONS.map((action) => (
+              <CommandItem
+                key={action.id}
+                value={action.label}
+                onSelect={() => run(action)}
               >
-                {worksheetHits.map((hit) => (
-                  <CommandItem
-                    key={hit.slug}
-                    value={`ws:${hit.slug}`}
-                    onSelect={() => void openWorksheetHit(hit.slug)}
-                  >
-                    <FileText />
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate">{hit.name}</span>
-                      {hit.snippet && (
-                        <span className="truncate text-[11px] text-muted-foreground">
-                          {hit.lineNumber ? `L${hit.lineNumber}: ` : ""}
-                          {hit.snippet}
-                        </span>
-                      )}
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-
-            {schemaHits.length > 0 && (
-              <CommandGroup heading="Schema">
-                {schemaHits.map(({ conn, entry }) => (
-                  <CommandItem
-                    key={`${conn.id}:${entry.qualified}`}
-                    value={`schema:${conn.id}:${entry.qualified}`}
-                    onSelect={() => insertSchemaEntry(entry)}
-                  >
-                    {entry.kind === "table" ? <Table /> : <Columns2 />}
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate font-mono text-xs">{entry.qualified}</span>
-                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <Database className="size-3" />
-                        {conn.name}
-                      </span>
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-          </CommandList>
-        )}
+                <action.icon />
+                <span className="flex-1">{action.label}</span>
+                <CommandShortcut>
+                  {formatShortcut(action.shortcut)}
+                </CommandShortcut>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
       </Command>
     </CommandDialog>
   )
