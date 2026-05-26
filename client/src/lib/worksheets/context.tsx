@@ -401,8 +401,11 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
             updatedAt: filesRef.current[slug]?.meta.updatedAt ?? new Date().toISOString(),
           })
         } else if (res.reason === "model-error") {
+          // Keep the raw model error in the console for debugging; show the
+          // user a friendly message rather than leaking SDK internals.
+          if (res.error) console.warn("auto-name worksheet failed:", res.error)
           toast.error("Couldn't auto-name this worksheet", {
-            description: res.error ?? "Keeping the default name.",
+            description: "Keeping the default name.",
           })
         }
       } catch {
