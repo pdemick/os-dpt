@@ -46,6 +46,7 @@ function freshMeta(input: CreateChatInput): ChatSessionMeta {
     pending: null,
     usage: [],
     totals: emptyTotals(),
+    traceParent: null,
   }
 }
 

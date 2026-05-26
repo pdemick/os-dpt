@@ -70,33 +70,24 @@ export function AIProviders() {
         </div>
       )}
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium">Model providers</h2>
+      <ProviderSection
+        title="Model providers"
+        providers={providers.filter((p) => p.kind === "model")}
+        loading={loading}
+        busyId={busyId}
+        onEdit={setEditing}
+        onDelete={setPendingDelete}
+      />
 
-        <div className="rounded-lg border border-border overflow-hidden">
-          <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr_auto] items-center gap-4 border-b border-border bg-muted/30 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <span>Name</span>
-            <span>Status</span>
-            <span>Secret</span>
-            <span>Last updated</span>
-            <span className="sr-only">Actions</span>
-          </div>
-
-          {loading ? (
-            <div className="px-4 py-6 text-sm text-muted-foreground">Loading…</div>
-          ) : (
-            providers.map((provider) => (
-              <ProviderRow
-                key={provider.id}
-                provider={provider}
-                busy={busyId === provider.id}
-                onEdit={() => setEditing(provider)}
-                onDelete={() => setPendingDelete(provider)}
-              />
-            ))
-          )}
-        </div>
-      </section>
+      <ProviderSection
+        title="Observability"
+        description="Trace agent runs to refine prompts. Optional — tracing is off until a key is set."
+        providers={providers.filter((p) => p.kind === "observability")}
+        loading={loading}
+        busyId={busyId}
+        onEdit={setEditing}
+        onDelete={setPendingDelete}
+      />
 
       <AIProviderDialog
         provider={editing}
@@ -147,6 +138,61 @@ export function AIProviders() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+type SectionProps = {
+  title: string
+  description?: string
+  providers: AIProvider[]
+  loading: boolean
+  busyId: string | null
+  onEdit: (provider: AIProvider) => void
+  onDelete: (provider: AIProvider) => void
+}
+
+function ProviderSection({
+  title,
+  description,
+  providers,
+  loading,
+  busyId,
+  onEdit,
+  onDelete,
+}: SectionProps) {
+  return (
+    <section className="flex flex-col gap-3">
+      <div>
+        <h2 className="text-sm font-medium">{title}</h2>
+        {description && (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-border overflow-hidden">
+        <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr_auto] items-center gap-4 border-b border-border bg-muted/30 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <span>Name</span>
+          <span>Status</span>
+          <span>Secret</span>
+          <span>Last updated</span>
+          <span className="sr-only">Actions</span>
+        </div>
+
+        {loading ? (
+          <div className="px-4 py-6 text-sm text-muted-foreground">Loading…</div>
+        ) : (
+          providers.map((provider) => (
+            <ProviderRow
+              key={provider.id}
+              provider={provider}
+              busy={busyId === provider.id}
+              onEdit={() => onEdit(provider)}
+              onDelete={() => onDelete(provider)}
+            />
+          ))
+        )}
+      </div>
+    </section>
   )
 }
 

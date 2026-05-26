@@ -1,5 +1,14 @@
 import type { ChatSession } from "./session.ts"
 
+/**
+ * Build the agent's system prompt. This output is used as a prompt-cache
+ * prefix in provider.ts (cache_control: ephemeral), so it MUST stay stable for
+ * the lifetime of a chat — it may only vary by per-chat bindings (worksheet /
+ * connection), which don't change once set. Do NOT inject per-turn-varying
+ * content here (timestamps, fetched context, row counts, etc.): doing so
+ * silently invalidates the cache on every step and turns cheap cache reads back
+ * into full-price input tokens. Put dynamic context in the message history.
+ */
 export function buildSystemPrompt(session: ChatSession): string {
   const { worksheetSlug, connectionId } = session.meta
   const bound = !!worksheetSlug

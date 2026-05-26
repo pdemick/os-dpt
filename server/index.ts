@@ -1,3 +1,7 @@
+// Must be first: loads a local .env into process.env before any other module
+// body runs and reads it (ESM evaluates imports in order).
+import "./load-env.ts"
+
 import { serve } from "@hono/node-server"
 import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
@@ -15,8 +19,10 @@ import agent from "./api/agent.ts"
 import context from "./api/context.ts"
 import { closeHistoryDb, openHistoryDb } from "./history/db.ts"
 import { startWorksheetsWatcher, stopWorksheetsWatcher } from "./history/watcher.ts"
+import { flushTracing, initTracing } from "./agent/tracing.ts"
 
 const workspace = await initWorkspace(process.argv.slice(2))
+await initTracing()
 openHistoryDb()
 startWorksheetsWatcher()
 void autoConnectAll(workspace)
@@ -52,6 +58,7 @@ const shutdown = async (signal: NodeJS.Signals) => {
   console.log(`\nreceived ${signal}, closing pools…`)
   stopWorksheetsWatcher()
   closeHistoryDb()
+  await flushTracing()
   await closeAll()
   server.close(() => process.exit(0))
 }

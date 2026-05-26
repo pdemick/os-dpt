@@ -60,6 +60,12 @@ export interface ChatSessionMeta {
   pending: PendingAsk | null
   usage: UsageEntry[]
   totals: UsageTotals
+  /**
+   * Braintrust exported parent-span handle for this chat's trace. Set on the
+   * first traced turn; later turns resume under it so the whole conversation
+   * is one trace instead of one-per-message. Only present when tracing is on.
+   */
+  traceParent?: string | null
 }
 
 /** One Anthropic API call's usage, attributed to a chat session. */

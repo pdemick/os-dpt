@@ -39,6 +39,7 @@ export class AIProviderStore {
     const empty: Record<AIProviderId, StoredAIProvider | null> = {
       anthropic: null,
       openai: null,
+      braintrust: null,
     }
     try {
       const raw = await fs.readFile(this.filePath, "utf8")
@@ -48,6 +49,7 @@ export class AIProviderStore {
       return {
         anthropic: data.providers?.anthropic ?? null,
         openai: data.providers?.openai ?? null,
+        braintrust: data.providers?.braintrust ?? null,
       }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return empty

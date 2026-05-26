@@ -73,8 +73,14 @@ export function AIProviderDialog({ provider, onOpenChange, onSaved }: Props) {
             {provider.configured ? "Update" : "Add"} {provider.label} key
           </DialogTitle>
           <DialogDescription>
-            Stored encrypted in <code>.os-dpt/credentials.enc</code> and exposed
-            to local agents as <code>{provider.envVar}</code>.
+            Stored encrypted in <code>.os-dpt/credentials.enc</code>.{" "}
+            {provider.kind === "observability" ? (
+              "Used by the local server to send agent traces."
+            ) : (
+              <>
+                Exposed to local agents as <code>{provider.envVar}</code>.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 

@@ -17,6 +17,7 @@ import {
   type ChatSession,
 } from "./session.ts"
 import { anthropicToolDefs, findTool } from "./tools/index.ts"
+import { startConversationSpan, traced, tracingEnabled } from "./tracing.ts"
 
 const MAX_STEPS = 20
 
@@ -33,7 +34,64 @@ function toolUseBlocks(msg: Anthropic.Message): Anthropic.ToolUseBlock[] {
   )
 }
 
+/** A readable input for the turn span: the latest user message. */
+function latestUserInput(session: ChatSession): unknown {
+  const last = session.messages[session.messages.length - 1]
+  if (!last || last.role !== "user") return null
+  return last.content
+}
+
+/**
+ * Resolve the conversation's trace parent, creating it on the first traced
+ * turn and persisting the handle so later turns (this process or a later one)
+ * resume the same trace. Returns undefined when tracing is disabled.
+ */
+async function conversationParent(session: ChatSession): Promise<string | undefined> {
+  if (!tracingEnabled()) return undefined
+  if (session.meta.traceParent) return session.meta.traceParent
+  const first = session.messages.find((m) => m.role === "user")
+  const handle = await startConversationSpan({
+    name: "conversation",
+    event: {
+      input: first ? first.content : null,
+      metadata: {
+        chatId: session.meta.id,
+        title: session.meta.title,
+        worksheetSlug: session.meta.worksheetSlug,
+        connectionId: session.meta.connectionId,
+        standalone: session.meta.standalone,
+      },
+    },
+  })
+  if (handle) {
+    session.meta.traceParent = handle
+    await persistSession(session)
+  }
+  return handle
+}
+
 export async function runAgentTurn(opts: RunOptions): Promise<void> {
+  const parent = await conversationParent(opts.session)
+  return traced(
+    {
+      name: "agent.turn",
+      type: "task",
+      parent,
+      event: {
+        input: latestUserInput(opts.session),
+        metadata: {
+          chatId: opts.session.meta.id,
+          worksheetSlug: opts.session.meta.worksheetSlug,
+          connectionId: opts.session.meta.connectionId,
+          standalone: opts.session.meta.standalone,
+        },
+      },
+    },
+    () => runTurn(opts),
+  )
+}
+
+async function runTurn(opts: RunOptions): Promise<void> {
   const { session, emit } = opts
   let apiKey: string
   try {
@@ -128,7 +186,21 @@ export async function runAgentTurn(opts: RunOptions): Promise<void> {
 
       let execution
       try {
-        execution = await tool.execute(block.input, { session })
+        execution = await traced(
+          {
+            name: `tool.${tool.name}`,
+            type: "tool",
+            event: { input: block.input },
+          },
+          async (span) => {
+            const result = await tool.execute(block.input, { session })
+            span.log({
+              output: result.toolResult,
+              metadata: { isError: result.isError, summary: result.uiSummary },
+            })
+            return result
+          },
+        )
       } catch (err) {
         const message = (err as Error).message
         await emit({

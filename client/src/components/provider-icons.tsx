@@ -1,4 +1,5 @@
 import type { SVGProps } from "react"
+import { ActivityIcon } from "lucide-react"
 
 import type { AIProviderId } from "@shared/ai-providers.ts"
 
@@ -40,5 +41,7 @@ export function ProviderIcon({
   className?: string
 }) {
   if (provider === "anthropic") return <AnthropicIcon className={className} />
-  return <OpenAIIcon className={className} />
+  if (provider === "openai") return <OpenAIIcon className={className} />
+  // braintrust (observability) — no brand glyph, use a neutral activity icon
+  return <ActivityIcon className={className} />
 }

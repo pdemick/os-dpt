@@ -1,20 +1,37 @@
 import { Hono } from "hono"
 
-import type { AIProvider, AIProviderId } from "@shared/ai-providers.ts"
+import type {
+  AIProvider,
+  AIProviderId,
+  AIProviderKind,
+} from "@shared/ai-providers.ts"
 
 import { CredentialVault } from "../credentials/vault.ts"
 import { AIProviderStore, type StoredAIProvider } from "../storage/ai-providers.ts"
+import { refreshTracing } from "../agent/tracing.ts"
 
-const AI_PROVIDER_IDS: readonly AIProviderId[] = ["anthropic", "openai"] as const
+const AI_PROVIDER_IDS: readonly AIProviderId[] = [
+  "anthropic",
+  "openai",
+  "braintrust",
+] as const
 
 const AI_PROVIDER_LABELS: Record<AIProviderId, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
+  braintrust: "Braintrust",
 }
 
 const AI_PROVIDER_ENV_VARS: Record<AIProviderId, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
+  braintrust: "BRAINTRUST_API_KEY",
+}
+
+const AI_PROVIDER_KINDS: Record<AIProviderId, AIProviderKind> = {
+  anthropic: "model",
+  openai: "model",
+  braintrust: "observability",
 }
 
 const vaultKey = (id: AIProviderId): string => `ai:${id}`
@@ -31,6 +48,7 @@ function toApi(id: AIProviderId, stored: StoredAIProvider | null): AIProvider {
   return {
     id,
     label: AI_PROVIDER_LABELS[id],
+    kind: AI_PROVIDER_KINDS[id],
     envVar: AI_PROVIDER_ENV_VARS[id],
     configured: stored !== null,
     last4: stored?.last4,
@@ -56,6 +74,26 @@ async function verifyKey(id: AIProviderId, apiKey: string): Promise<void> {
           | { error?: { message?: string } }
           | null
         throw new Error(body?.error?.message ?? `Anthropic returned ${res.status}`)
+      }
+      return
+    }
+    if (id === "braintrust") {
+      // Same endpoint the SDK logs into. A valid key returns org_info.
+      const appUrl = process.env.BRAINTRUST_APP_URL ?? "https://www.braintrust.dev"
+      const res = await fetch(`${appUrl}/api/apikey/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        signal,
+      })
+      if (!res.ok) {
+        throw new Error(
+          res.status === 401 || res.status === 403
+            ? "Invalid Braintrust API key"
+            : `Braintrust returned ${res.status}`,
+        )
       }
       return
     }
@@ -123,6 +161,8 @@ export function aiProvidersRouter(workspace: string): Hono {
       })
       throw err
     }
+    // Pick up the new Braintrust key without a server restart.
+    if (provider === "braintrust") await refreshTracing()
     return c.json({ provider: toApi(provider, meta) })
   })
 
@@ -136,6 +176,8 @@ export function aiProvidersRouter(workspace: string): Hono {
     // harmless, but a row that claims "configured" with no key is not.
     await store.remove(provider)
     await vault.deletePassword(vaultKey(provider))
+    // Stop tracing once its key is gone (unless an env override remains).
+    if (provider === "braintrust") await refreshTracing()
     return c.json({ provider: toApi(provider, null) })
   })
 
