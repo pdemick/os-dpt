@@ -76,6 +76,23 @@ export const agentApi = {
     })
   },
 
+  // Best-effort LLM titling from the first user message. Returns skipped:true
+  // (with a reason, and an error string for model failures) when no title was
+  // generated; the caller keeps the truncated fallback in that case.
+  autoNameSession: async (
+    id: string,
+  ): Promise<{
+    title: string | null
+    skipped: boolean
+    reason?: "already-named" | "empty" | "model-error"
+    error?: string
+  }> =>
+    jsonOrThrow(
+      await fetch(`/api/agent/sessions/${encodeURIComponent(id)}/auto-name`, {
+        method: "POST",
+      }),
+    ),
+
   getWorksheetUsage: async (
     slug: string,
   ): Promise<{ totals: UsageTotals; bySession: WorksheetUsageSession[] }> =>

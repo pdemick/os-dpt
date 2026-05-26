@@ -10,6 +10,7 @@ import {
 
 import { activeIds } from "../db/registry.ts"
 import { resumeWithAnswer, runAgentTurn } from "../agent/loop.ts"
+import { generateChatTitle } from "../agent/naming.ts"
 import {
   appendMessage,
   createChat,
@@ -145,6 +146,63 @@ app.patch("/sessions/:id", async (c) => {
 app.delete("/sessions/:id", async (c) => {
   await deleteChat(c.req.param("id"))
   return c.json({ ok: true })
+})
+
+/** Pull the text of the first user turn for titling. Content may be a plain
+ *  string (how we persist live messages) or Anthropic content blocks. */
+function firstUserText(messages: { role: string; content: unknown }[]): string {
+  const first = messages.find((m) => m.role === "user")
+  if (!first) return ""
+  const { content } = first
+  if (typeof content === "string") return content.trim()
+  if (Array.isArray(content)) {
+    return content
+      .map((b) =>
+        b && typeof b === "object" && "type" in b && b.type === "text" && "text" in b
+          ? String((b as { text: unknown }).text)
+          : "",
+      )
+      .join("")
+      .trim()
+  }
+  return ""
+}
+
+// Best-effort LLM titling of a chat from its first user message. The truncated
+// fallback title is already set when the message lands (see /messages), so on
+// any failure the client keeps that and we report the reason. Runs at most once
+// per session via the titleGenerated flag.
+app.post("/sessions/:id/auto-name", async (c) => {
+  const id = c.req.param("id")
+  return withSessionLock(id, async () => {
+    const session = await getChat(id)
+    if (!session) return c.json({ error: "not_found" }, 404)
+    if (session.meta.titleGenerated) {
+      return c.json({
+        title: session.meta.title,
+        skipped: true,
+        reason: "already-named" as const,
+      })
+    }
+    const prompt = firstUserText(session.messages)
+    if (!prompt) {
+      return c.json({ title: session.meta.title, skipped: true, reason: "empty" as const })
+    }
+    try {
+      const title = await generateChatTitle(prompt)
+      await setTitle(session, title, true)
+      return c.json({ title, skipped: false })
+    } catch (err) {
+      const message = (err as Error).message
+      console.warn(`auto-name chat ${id} failed:`, message)
+      return c.json({
+        title: session.meta.title,
+        skipped: true,
+        reason: "model-error" as const,
+        error: message,
+      })
+    }
+  })
 })
 
 app.post("/sessions/:id/messages", async (c) => {

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react"
 import type { ReactNode } from "react"
+import { toast } from "sonner"
 
 import type { AgentEvent, ChatSessionMeta } from "@shared/agent"
 
@@ -170,6 +171,12 @@ export function AgentChatProvider({
   const activeSlugRef = useRef(worksheetSlug)
   activeSlugRef.current = worksheetSlug
 
+  // Session ids we've already tried to auto-name this session. On a persistent
+  // failure (e.g. no API key) the server leaves titleGenerated false so a
+  // transient error can be retried, but we don't want to re-hit /auto-name —
+  // and re-toast — on every subsequent message. One attempt per session.
+  const autoNameAttempted = useRef<Set<string>>(new Set())
+
   const refreshChats = useCallback(async () => {
     try {
       const list = await agentApi.listSessions()
@@ -276,6 +283,10 @@ export function AgentChatProvider({
     async (text: string) => {
       if (streaming || pendingQuestion) return
       const meta = await ensureSession()
+      // A fresh session has no title yet; its first message is what we name on.
+      // The ref guard ensures we attempt this once per session even when the
+      // server keeps titleGenerated false after a (retryable) model error.
+      const isFirstMessage = !meta.titleGenerated && !autoNameAttempted.current.has(meta.id)
       setItems((prev) => [...prev, { id: rid(), kind: "user", text }])
       setStreaming(true)
       let stream: AsyncGenerator<AgentEvent>
@@ -289,6 +300,28 @@ export function AgentChatProvider({
         return
       }
       await consume(stream)
+      // The server set a truncated title when the message landed. On the first
+      // turn, ask it to upgrade that to an LLM summary (best-effort) before we
+      // refresh, so the history list reflects the final title in one pass.
+      if (isFirstMessage) {
+        autoNameAttempted.current.add(meta.id)
+        try {
+          const res = await agentApi.autoNameSession(meta.id)
+          if (!res.skipped && res.title) {
+            const title = res.title
+            setSession((s) => (s && s.id === meta.id ? { ...s, title, titleGenerated: true } : s))
+          } else if (res.reason === "model-error") {
+            // Keep the raw model error in the console for debugging; show the
+            // user a friendly message rather than leaking SDK internals.
+            if (res.error) console.warn("auto-name conversation failed:", res.error)
+            toast.error("Couldn't auto-name this conversation", {
+              description: "Falling back to a truncated title.",
+            })
+          }
+        } catch {
+          // best-effort — the truncated title stays in place
+        }
+      }
       // First message in a fresh session updates the title server-side;
       // pull the new meta so the history list shows it.
       await refreshChats()

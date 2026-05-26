@@ -187,8 +187,9 @@ app.post("/:slug/auto-name", async (c) => {
     await setName(slug, name)
     return c.json({ name, skipped: false })
   } catch (err) {
-    console.warn(`auto-name failed for ${slug}:`, (err as Error).message)
-    return c.json({ name: slug, skipped: true, reason: "model-error" as const })
+    const message = (err as Error).message
+    console.warn(`auto-name failed for ${slug}:`, message)
+    return c.json({ name: slug, skipped: true, reason: "model-error" as const, error: message })
   }
 })
 

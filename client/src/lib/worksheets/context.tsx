@@ -6,6 +6,7 @@ import {
   useState,
 } from "react"
 import type { ReactNode } from "react"
+import { toast } from "sonner"
 import type {
   CursorPos,
   QueryResponse,
@@ -398,6 +399,13 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
             slug,
             name: res.name,
             updatedAt: filesRef.current[slug]?.meta.updatedAt ?? new Date().toISOString(),
+          })
+        } else if (res.reason === "model-error") {
+          // Keep the raw model error in the console for debugging; show the
+          // user a friendly message rather than leaking SDK internals.
+          if (res.error) console.warn("auto-name worksheet failed:", res.error)
+          toast.error("Couldn't auto-name this worksheet", {
+            description: "Keeping the default name.",
           })
         }
       } catch {
