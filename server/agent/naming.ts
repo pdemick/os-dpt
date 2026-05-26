@@ -3,12 +3,16 @@ import Anthropic from "@anthropic-ai/sdk"
 import { getAnthropicKey } from "./provider.ts"
 
 const NAMING_MODEL = "claude-haiku-4-5-20251001"
-const MAX_SQL_CHARS = 2000
+const MAX_INPUT_CHARS = 2000
 const MAX_NAME_CHARS = 60
 
-const SYSTEM_PROMPT =
+const SQL_SYSTEM_PROMPT =
   "You name SQL queries. Given a SQL snippet, respond with a concise 2-5 word title in Title Case. " +
   "No quotes, no punctuation, no preamble. Just the title."
+
+const CHAT_SYSTEM_PROMPT =
+  "You name chat conversations. Given the user's first message, respond with a concise 2-5 word title " +
+  "in Title Case summarizing the topic. No quotes, no punctuation, no preamble. Just the title."
 
 function sanitize(raw: string): string {
   let s = raw.trim()
@@ -22,14 +26,17 @@ function sanitize(raw: string): string {
   return s
 }
 
-export async function generateWorksheetName(sql: string): Promise<string> {
+// Single Haiku round-trip shared by the worksheet and conversation namers.
+// Throws on a missing key, an API failure, or an empty title so callers can
+// fall back to a truncated name and surface the error.
+async function generateTitle(input: string, systemPrompt: string): Promise<string> {
   const apiKey = await getAnthropicKey()
-  const snippet = sql.length > MAX_SQL_CHARS ? sql.slice(0, MAX_SQL_CHARS) : sql
+  const snippet = input.length > MAX_INPUT_CHARS ? input.slice(0, MAX_INPUT_CHARS) : input
   const client = new Anthropic({ apiKey })
   const msg = await client.messages.create({
     model: NAMING_MODEL,
     max_tokens: 32,
-    system: SYSTEM_PROMPT,
+    system: systemPrompt,
     messages: [{ role: "user", content: snippet }],
   })
   const text = msg.content
@@ -38,4 +45,12 @@ export async function generateWorksheetName(sql: string): Promise<string> {
   const name = sanitize(text)
   if (!name) throw new Error("Empty name from model")
   return name
+}
+
+export function generateWorksheetName(sql: string): Promise<string> {
+  return generateTitle(sql, SQL_SYSTEM_PROMPT)
+}
+
+export function generateChatTitle(prompt: string): Promise<string> {
+  return generateTitle(prompt, CHAT_SYSTEM_PROMPT)
 }

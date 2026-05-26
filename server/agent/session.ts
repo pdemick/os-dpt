@@ -39,6 +39,7 @@ function freshMeta(input: CreateChatInput): ChatSessionMeta {
     createdAt: now,
     updatedAt: now,
     title: input.title ?? null,
+    titleGenerated: false,
     worksheetSlug: input.worksheetSlug ?? null,
     standalone: input.standalone ?? false,
     connectionId: input.connectionId ?? null,
@@ -58,6 +59,11 @@ function ensureUsageFields(session: ChatSession): ChatSession {
   // Sessions predating the standalone flag are all worksheet-panel origin
   // (the Chat page is newer); default them to non-standalone.
   if (typeof session.meta.standalone !== "boolean") session.meta.standalone = false
+  // Sessions predating LLM auto-naming carry a (possibly truncated) title but
+  // no flag; treat them as already-named so we don't re-name old chats.
+  if (typeof session.meta.titleGenerated !== "boolean") {
+    session.meta.titleGenerated = session.meta.title != null
+  }
   return session
 }
 
@@ -144,8 +150,15 @@ export async function recordUsage(
   await persist(session)
 }
 
-export async function setTitle(session: ChatSession, title: string): Promise<void> {
+export async function setTitle(
+  session: ChatSession,
+  title: string,
+  generated = false,
+): Promise<void> {
   session.meta.title = title
+  // Only the LLM namer flips this; the truncation fallback leaves it false so
+  // a later auto-name attempt can still upgrade the title.
+  if (generated) session.meta.titleGenerated = true
   session.meta.updatedAt = nowIso()
   await persist(session)
 }

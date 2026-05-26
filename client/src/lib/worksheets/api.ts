@@ -43,7 +43,12 @@ export const api = {
   autoNameWorksheet: async (
     slug: string,
     sql: string,
-  ): Promise<{ name: string; skipped: boolean }> =>
+  ): Promise<{
+    name: string
+    skipped: boolean
+    reason?: "already-named" | "empty" | "model-error"
+    error?: string
+  }> =>
     jsonOrThrow(
       await fetch(`/api/worksheets/${encodeURIComponent(slug)}/auto-name`, {
         method: "POST",

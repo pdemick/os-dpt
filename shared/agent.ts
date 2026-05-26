@@ -40,6 +40,12 @@ export interface ChatSessionMeta {
   createdAt: string
   updatedAt: string
   title: string | null
+  /**
+   * True once `title` was set by the LLM auto-namer (vs. the immediate
+   * truncation fallback). Gates re-naming so the auto-name endpoint runs at
+   * most once per session.
+   */
+  titleGenerated: boolean
   worksheetSlug: string | null
   /**
    * True only for sessions created from the standalone Chat page. Used to

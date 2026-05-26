@@ -8,6 +8,7 @@ import {
   useState,
 } from "react"
 import type { ReactNode } from "react"
+import { toast } from "sonner"
 
 import type { AgentEvent, ChatSessionMeta } from "@shared/agent"
 
@@ -276,6 +277,8 @@ export function AgentChatProvider({
     async (text: string) => {
       if (streaming || pendingQuestion) return
       const meta = await ensureSession()
+      // A fresh session has no title yet; its first message is what we name on.
+      const isFirstMessage = !meta.titleGenerated
       setItems((prev) => [...prev, { id: rid(), kind: "user", text }])
       setStreaming(true)
       let stream: AsyncGenerator<AgentEvent>
@@ -289,6 +292,24 @@ export function AgentChatProvider({
         return
       }
       await consume(stream)
+      // The server set a truncated title when the message landed. On the first
+      // turn, ask it to upgrade that to an LLM summary (best-effort) before we
+      // refresh, so the history list reflects the final title in one pass.
+      if (isFirstMessage) {
+        try {
+          const res = await agentApi.autoNameSession(meta.id)
+          if (!res.skipped && res.title) {
+            const title = res.title
+            setSession((s) => (s && s.id === meta.id ? { ...s, title, titleGenerated: true } : s))
+          } else if (res.reason === "model-error") {
+            toast.error("Couldn't auto-name this conversation", {
+              description: res.error ?? "Falling back to a truncated title.",
+            })
+          }
+        } catch {
+          // best-effort — the truncated title stays in place
+        }
+      }
       // First message in a fresh session updates the title server-side;
       // pull the new meta so the history list shows it.
       await refreshChats()

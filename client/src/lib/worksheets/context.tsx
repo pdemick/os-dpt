@@ -6,6 +6,7 @@ import {
   useState,
 } from "react"
 import type { ReactNode } from "react"
+import { toast } from "sonner"
 import type {
   CursorPos,
   QueryResponse,
@@ -398,6 +399,10 @@ export function WorksheetsProvider({ children }: { children: ReactNode }) {
             slug,
             name: res.name,
             updatedAt: filesRef.current[slug]?.meta.updatedAt ?? new Date().toISOString(),
+          })
+        } else if (res.reason === "model-error") {
+          toast.error("Couldn't auto-name this worksheet", {
+            description: res.error ?? "Keeping the default name.",
           })
         }
       } catch {
