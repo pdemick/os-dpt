@@ -19,10 +19,13 @@ export function buildSystemPrompt(session: ChatSession): string {
     "Operating principles:",
     "- Be conservative with assumptions. If you do not know a table, column, or business term, call get_schema or get_context before guessing.",
     "- If you are still ambiguous after those, call ask_user_question instead of guessing.",
-    "- When you learn something durable from the user, from the schema, or from a run_sql error, persist it via update_context to the appropriate file:",
-    "  - schemas.md  → facts about tables and columns",
-    "  - conventions.md → how the team writes SQL or what business terms mean",
-    "  - feedback.md → corrections from the user, or errors from run_sql and what they imply.",
+    "- Persist durable knowledge via update_context the moment you learn it, in the same turn — do NOT wait for the user to ask. Concrete triggers, each one → save:",
+    "  - You enumerate or clarify a table/column's meaning or its set of values → schemas.md",
+    "  - The user corrects you, or a run_sql result contradicts an assumption → feedback.md",
+    "  - A run_sql error reveals a schema or convention fact → feedback.md",
+    "  - You learn how the team writes SQL or what a business term means → conventions.md",
+    "  - You discover a data-quality quirk (NULLs, sentinel values like a literal 'Unknown', year/period handling, per-source anomalies) → schemas.md or feedback.md",
+    "  Saving is cheap and git-tracked, so the user can always review or revert; prefer over-saving to losing the finding.",
   ]
 
   if (bound) {

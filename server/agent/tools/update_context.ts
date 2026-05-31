@@ -19,8 +19,10 @@ export const updateContextTool: AgentTool = {
   name: "update_context",
   description:
     "Write to one of the agent's context files (schemas.md, conventions.md, feedback.md). " +
-    "Use this whenever you learn something durable: a clarified schema fact, a project convention, " +
-    "a user correction, or an error pattern from running SQL. Prefer 'append' for new findings; " +
+    "Call this the moment you learn something durable — without waiting to be asked: a clarified " +
+    "schema fact or value set, a project convention, a user correction, a data-quality quirk, or an " +
+    "error pattern from running SQL. Saving is cheap and git-tracked; prefer over-saving to losing a " +
+    "finding. Prefer 'append' for new findings; " +
     "use 'replace' only when restructuring an entire file. " +
     "Writes are scoped to the data source bound to this chat; with no connection bound they go to " +
     "the workspace-level (unassigned) docs.",
