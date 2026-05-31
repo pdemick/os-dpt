@@ -36,7 +36,9 @@ const emptyForm: FormState = {
   user: "",
   password: "",
   ssl: false,
-  accessMode: "read-write",
+  // Secure by default — the user flips the toggle to read-write when they
+  // intend the agent to run writes/DDL through this connection.
+  accessMode: "read-only",
 }
 
 function toInput(form: FormState): NewConnectionInput {

@@ -66,10 +66,12 @@ function parseInput(body: unknown): NewConnectionInput {
     user: requireStr(b.user, "user"),
     password: typeof b.password === "string" ? b.password : "",
     ssl: Boolean(b.ssl),
-    // Lenient by design: anything that isn't an explicit "read-only" defaults to
-    // "read-write" (the safe default for new/legacy input). PATCH, by contrast,
-    // is a deliberate change and validates strictly.
-    accessMode: b.accessMode === "read-only" ? "read-only" : "read-write",
+    // Secure by default: a new connection is read-only unless the caller
+    // explicitly asks for "read-write". The client dialog sends an explicit
+    // mode; this default only governs direct API callers that omit it. (Legacy
+    // *stored* connections without the field stay read-write — see
+    // storage/connections.ts — so upgrading never silently revokes writes.)
+    accessMode: b.accessMode === "read-write" ? "read-write" : "read-only",
   }
 }
 
@@ -110,7 +112,7 @@ async function connectStored(
       await pool.end().catch(() => {})
       return { ok: true }
     }
-    setPool(id, pool)
+    setPool(id, pool, conn.accessMode)
     void introspect(pool)
       .then((ns) => writeConnectionSchema(id, ns))
       .catch((err) => console.warn(`[introspect ${id}]`, err))
