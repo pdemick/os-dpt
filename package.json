@@ -3,6 +3,25 @@
   "version": "0.0.1",
   "private": true,
   "description": "Local web-based SQL editor with a built-in chat-to-SQL AI agent.",
+  "license": "MIT",
+  "author": "Paul Demick",
+  "homepage": "https://github.com/pdemick/os-dpt#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pdemick/os-dpt.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pdemick/os-dpt/issues"
+  },
+  "keywords": [
+    "sql",
+    "sql-editor",
+    "postgres",
+    "ai-agent",
+    "text-to-sql",
+    "chat-to-sql",
+    "local-first"
+  ],
   "scripts": {
     "dev": "node ./scripts/dev.mjs",
     "dev:client": "pnpm --dir client dev",

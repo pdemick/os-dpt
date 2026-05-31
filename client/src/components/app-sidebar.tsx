@@ -3,17 +3,13 @@ import {
   BookOpenIcon,
   DatabaseIcon,
   FileTextIcon,
-  GalleryVerticalEndIcon,
   SparklesIcon,
   Settings2Icon,
 } from "lucide-react"
 
-import { NavUser } from "@/components/nav-user"
-import { TeamSwitcher } from "@/components/team-switcher"
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarHeader,
@@ -37,20 +33,6 @@ const navItems: {
   { id: "settings", title: "Settings", icon: Settings2Icon },
 ]
 
-const teams = [
-  {
-    name: "os-dpt",
-    logo: <GalleryVerticalEndIcon />,
-    plan: "Local",
-  },
-]
-
-const user = {
-  name: "you",
-  email: "",
-  avatar: "",
-}
-
 export function AppSidebar({
   view,
   onSelect,
@@ -62,7 +44,18 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <TeamSwitcher teams={teams} />
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <div className="flex items-center gap-2 p-2 text-sidebar-foreground">
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <DatabaseIcon className="size-4" />
+              </div>
+              <span className="truncate text-sm font-semibold group-data-[collapsible=icon]:hidden">
+                dpt
+              </span>
+            </div>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -83,9 +76,6 @@ export function AppSidebar({
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <NavUser user={user} />
-      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )

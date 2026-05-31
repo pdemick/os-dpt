@@ -1,5 +1,6 @@
-import { getPool } from "../../db/registry.ts"
+import { getAccessMode, getPool } from "../../db/registry.ts"
 import { normalizePgError } from "../../db/postgres.ts"
+import { isReadOnlyStatement } from "../../db/sql-safety.ts"
 
 import type { AgentTool } from "./index.ts"
 
@@ -30,9 +31,11 @@ export const runSqlTool: AgentTool = {
     "queries you've written and to inspect data. If the query errors, capture what you learned by calling " +
     "update_context against feedback.md so future runs avoid the same mistake. " +
     "Row results are capped (default 50, max 500) — add LIMIT or aggregation if you need a wider view. " +
-    "IMPORTANT: this tool executes the SQL verbatim against whatever role the connection uses — including " +
-    "DDL (CREATE/DROP/ALTER) and DML (INSERT/UPDATE/DELETE/TRUNCATE). For read-only exploration prefer " +
-    "SELECT. Before running anything that mutates data or schema, call ask_user_question to confirm.",
+    "IMPORTANT: this tool executes the SQL verbatim against whatever role the connection uses. Connections " +
+    "default to read-only, which rejects anything but a single read statement (SELECT/WITH/SHOW/EXPLAIN/" +
+    "TABLE/VALUES). On a read-write connection it will also run DDL (CREATE/DROP/ALTER) and DML (INSERT/" +
+    "UPDATE/DELETE/TRUNCATE), so before running anything that mutates data or schema, call ask_user_question " +
+    "to confirm.",
   input_schema: {
     type: "object",
     required: ["sql"],
@@ -72,6 +75,20 @@ export const runSqlTool: AgentTool = {
         toolResult: `Connection not active: ${connId}. The user must connect it before SQL can run.`,
         isError: true,
         uiSummary: "run_sql: connection inactive",
+      }
+    }
+    // Hard guard: a read-only connection accepts only a single read statement.
+    // The database also enforces this (default_transaction_read_only), but this
+    // catches it earlier with a clear, recoverable message and closes the
+    // multi-statement bypass. To run writes/DDL the user flips the connection
+    // to read-write in the Connections view.
+    if (getAccessMode(connId) === "read-only" && !isReadOnlyStatement(input.sql)) {
+      return {
+        toolResult:
+          "This connection is read-only, so only a single read statement (SELECT / WITH / SHOW / EXPLAIN / TABLE / VALUES) is allowed. " +
+          "Do not attempt to bypass this. If the user wants to run writes or DDL, tell them to switch the connection to read-write in the Connections view.",
+        isError: true,
+        uiSummary: "run_sql: blocked (read-only connection)",
       }
     }
     const cap = Math.min(
