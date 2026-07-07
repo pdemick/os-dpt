@@ -35,7 +35,16 @@ function statusIcon(status: ToolItem["status"]) {
  * preview with actions to copy the SQL to the clipboard or export it into a
  * freshly created worksheet.
  */
-function RunSqlRow({ item, sql }: { item: ToolItem; sql: string }) {
+function RunSqlRow({
+  item,
+  sql,
+  queryName,
+}: {
+  item: ToolItem
+  sql: string
+  /** Model-supplied name for the query (the tool input's `name`), when present. */
+  queryName?: string
+}) {
   const [expanded, setExpanded] = useState(false)
   const [exporting, setExporting] = useState(false)
 
@@ -51,14 +60,24 @@ function RunSqlRow({ item, sql }: { item: ToolItem; sql: string }) {
   const copyToWorksheet = async () => {
     setExporting(true)
     try {
-      const meta = await worksheetsApi.createWorksheet()
+      const meta = await worksheetsApi.createWorksheet(queryName)
       await worksheetsApi.saveWorksheet(meta.slug, sql)
       let name = meta.name
-      try {
-        const named = await worksheetsApi.autoNameWorksheet(meta.slug, sql)
-        if (!named.skipped && named.name) name = named.name
-      } catch {
-        // best-effort — the default name stays in place
+      if (queryName) {
+        // The query already has a model-supplied name — reuse it instead of
+        // paying for another LLM naming call.
+        try {
+          name = (await worksheetsApi.renameWorksheet(meta.slug, queryName)).name
+        } catch {
+          // best-effort — the slug-derived name stays in place
+        }
+      } else {
+        try {
+          const named = await worksheetsApi.autoNameWorksheet(meta.slug, sql)
+          if (!named.skipped && named.name) name = named.name
+        } catch {
+          // best-effort — the default name stays in place
+        }
       }
       toast.success(`Created worksheet “${name}”`)
     } catch (err) {
@@ -85,6 +104,9 @@ function RunSqlRow({ item, sql }: { item: ToolItem; sql: string }) {
       >
         {statusIcon(item.status)}
         <span className="font-mono">{item.name}</span>
+        {queryName ? (
+          <span className="truncate font-medium text-foreground/80">{queryName}</span>
+        ) : null}
         {item.summary ? <span className="truncate">— {item.summary}</span> : null}
         <ChevronRightIcon
           className={cn("ml-auto size-3 shrink-0 transition-transform", expanded && "rotate-90")}
@@ -161,10 +183,11 @@ export function TranscriptRow({ item }: { item: TranscriptItem }) {
     case "tool": {
       // run_sql calls get an expandable row exposing the SQL; a malformed
       // input (no sql string) falls through to the generic row.
-      const sql =
-        item.name === "run_sql" ? (item.input as { sql?: unknown } | null)?.sql : undefined
-      if (typeof sql === "string" && sql.trim() !== "") {
-        return <RunSqlRow item={item} sql={sql} />
+      const input =
+        item.name === "run_sql" ? (item.input as { sql?: unknown; name?: unknown } | null) : null
+      if (typeof input?.sql === "string" && input.sql.trim() !== "") {
+        const queryName = typeof input.name === "string" ? input.name.trim() : ""
+        return <RunSqlRow item={item} sql={input.sql} queryName={queryName || undefined} />
       }
       return (
         <div
