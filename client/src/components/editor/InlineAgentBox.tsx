@@ -38,7 +38,8 @@ export function InlineAgentBox({
   const [status, setStatus] = useState<Status>({ kind: "idle" })
   const inputRef = useRef<HTMLInputElement>(null)
   // Quick-edit session per worksheet, reused across prompts so follow-ups
-  // ("now add a limit") keep their conversation context.
+  // ("now add a limit") keep their conversation context. Reuse is safe
+  // long-term: the server caps quick-edit history to the last few turns.
   const sessionsBySlug = useRef<Map<string, { id: string; connectionId: string | null }>>(
     new Map(),
   )

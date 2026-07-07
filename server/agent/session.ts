@@ -119,6 +119,36 @@ export async function deleteChat(id: string): Promise<void> {
   await fs.rm(paths.chat(id), { force: true })
 }
 
+// Quick-edit sessions are hidden, one per worksheet, and reused indefinitely;
+// every prompt re-embeds the full worksheet contents, so old turns lose value
+// fast while their tokens keep billing on every call. Cap the history by
+// dropping whole turns from the front once it exceeds MAX, cutting down to
+// KEEP. The MAX/KEEP gap is hysteresis: a trim shifts the conversation's
+// prompt-cache prefix (one full re-read), so trim in chunks every few turns
+// rather than sliding the window on every message.
+const QUICK_EDIT_MAX_TURNS = 8
+const QUICK_EDIT_KEEP_TURNS = 4
+
+/**
+ * Drop oldest turns from a quick-edit session once it exceeds the cap.
+ * No-op for chat sessions. Mutates in memory only — callers persist via the
+ * next appendMessage/persistSession.
+ */
+export function trimQuickEditHistory(session: ChatSession): void {
+  if (session.meta.mode !== "quick-edit") return
+  // A turn starts at a plain-string user message (live prompts are persisted
+  // as strings; tool_results are block arrays), so cutting at one never
+  // orphans a tool_use/tool_result pair.
+  const turnStarts: number[] = []
+  session.messages.forEach((m, i) => {
+    if (m.role === "user" && typeof m.content === "string") turnStarts.push(i)
+  })
+  if (turnStarts.length <= QUICK_EDIT_MAX_TURNS) return
+  session.messages = session.messages.slice(
+    turnStarts[turnStarts.length - QUICK_EDIT_KEEP_TURNS],
+  )
+}
+
 export async function appendMessage(
   session: ChatSession,
   message: AnthropicMessage,

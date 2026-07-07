@@ -19,6 +19,7 @@ import {
   listChats,
   setConnection,
   setTitle,
+  trimQuickEditHistory,
 } from "../agent/session.ts"
 
 const app = new Hono()
@@ -257,6 +258,10 @@ app.post("/sessions/:id/messages", async (c) => {
           })
           return
         }
+        // Quick-edit sessions reuse one hidden session per worksheet; cap
+        // their history here so cost doesn't grow without bound. In-memory
+        // mutation only — the appendMessage below persists it.
+        trimQuickEditHistory(session)
         // The user message + auto-title are persisted BEFORE the loop
         // runs. If runAgentTurn throws mid-stream the message is on
         // disk but the client saw no reply — do NOT add a client-side
