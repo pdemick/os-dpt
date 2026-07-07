@@ -43,6 +43,7 @@ export function InlineAgentBox({
     new Map(),
   )
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   const streaming = status.kind === "running"
 
@@ -62,9 +63,24 @@ export function InlineAgentBox({
   useEffect(
     () => () => {
       if (doneTimer.current) clearTimeout(doneTimer.current)
+      abortRef.current?.abort()
     },
     [],
   )
+
+  // Abort any in-flight run and reset the status line. Note this only stops
+  // the client from consuming events (in particular, sql_written no longer
+  // lands in the buffer) — the server finishes the turn on its own.
+  const cancel = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setStatus({ kind: "idle" })
+  }, [])
+
+  const close = useCallback(() => {
+    cancel()
+    setOpen(false)
+  }, [cancel])
 
   const ensureSession = useCallback(async (): Promise<string> => {
     let cached = sessionsBySlug.current.get(slug)
@@ -107,6 +123,8 @@ export function InlineAgentBox({
     const text = prompt.trim()
     if (!text || streaming) return
     if (doneTimer.current) clearTimeout(doneTimer.current)
+    const controller = new AbortController()
+    abortRef.current = controller
     setStatus({ kind: "running", text: "thinking…" })
     try {
       const sessionId = await ensureSession()
@@ -114,7 +132,7 @@ export function InlineAgentBox({
       // contents at the end of every message — append them here.
       const contents = buffer.trim() === "" ? "(empty worksheet)" : buffer
       const message = `${text}\n\n--- current worksheet contents ---\n${contents}`
-      const stream = await agentApi.sendMessage(sessionId, message)
+      const stream = await agentApi.sendMessage(sessionId, message, controller.signal)
       let failed: string | null = null
       for await (const event of stream) {
         switch (event.type) {
@@ -147,7 +165,13 @@ export function InlineAgentBox({
         doneTimer.current = setTimeout(() => setStatus({ kind: "idle" }), 2500)
       }
     } catch (err) {
-      setStatus({ kind: "error", text: (err as Error).message })
+      // A cancel() aborts the fetch mid-stream; that's not an error and
+      // cancel() already reset the status.
+      if (!controller.signal.aborted) {
+        setStatus({ kind: "error", text: (err as Error).message })
+      }
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null
     }
   }, [prompt, streaming, ensureSession, buffer, onSql])
 
@@ -181,7 +205,9 @@ export function InlineAgentBox({
         <Input
           ref={inputRef}
           value={prompt}
-          disabled={streaming}
+          // readOnly (not disabled) so the input keeps focus while a run
+          // streams and Escape still reaches the handler below.
+          readOnly={streaming}
           placeholder="Describe a change to this worksheet…"
           className="h-7 border-none bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 dark:bg-transparent"
           onChange={(e) => setPrompt(e.target.value)}
@@ -192,7 +218,7 @@ export function InlineAgentBox({
             }
             if (e.key === "Escape") {
               e.preventDefault()
-              setOpen(false)
+              close()
             }
           }}
         />
@@ -200,9 +226,8 @@ export function InlineAgentBox({
           type="button"
           variant="ghost"
           size="icon-xs"
-          aria-label="Close"
-          disabled={streaming}
-          onClick={() => setOpen(false)}
+          aria-label={streaming ? "Cancel" : "Close"}
+          onClick={close}
         >
           <XIcon />
         </Button>
