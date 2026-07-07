@@ -1,12 +1,123 @@
-import { memo } from "react"
+import { memo, useState } from "react"
 import type { ReactNode } from "react"
-import { CheckIcon, Loader2Icon, XIcon } from "lucide-react"
+import {
+  CheckIcon,
+  ChevronRightIcon,
+  CopyIcon,
+  FilePlus2Icon,
+  Loader2Icon,
+  XIcon,
+} from "lucide-react"
 import { Streamdown } from "streamdown"
+import { toast } from "sonner"
 
+import { Button } from "@/components/ui/button"
 import type { TranscriptItem } from "@/lib/agent/context"
 import { cn } from "@/lib/utils"
+import { api as worksheetsApi } from "@/lib/worksheets/api"
 
 import { ChartView } from "./ChartView"
+
+type ToolItem = Extract<TranscriptItem, { kind: "tool" }>
+
+function statusIcon(status: ToolItem["status"]) {
+  return status === "running" ? (
+    <Loader2Icon className="size-3 animate-spin" />
+  ) : status === "error" ? (
+    <XIcon className="size-3" />
+  ) : (
+    <CheckIcon className="size-3" />
+  )
+}
+
+/**
+ * A run_sql call rendered as an expandable row: the header toggles a SQL
+ * preview with actions to copy the SQL to the clipboard or export it into a
+ * freshly created worksheet.
+ */
+function RunSqlRow({ item, sql }: { item: ToolItem; sql: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const [exporting, setExporting] = useState(false)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(sql)
+      toast.success("SQL copied to clipboard")
+    } catch {
+      toast.error("Couldn't copy to clipboard")
+    }
+  }
+
+  const copyToWorksheet = async () => {
+    setExporting(true)
+    try {
+      const meta = await worksheetsApi.createWorksheet()
+      await worksheetsApi.saveWorksheet(meta.slug, sql)
+      let name = meta.name
+      try {
+        const named = await worksheetsApi.autoNameWorksheet(meta.slug, sql)
+        if (!named.skipped && named.name) name = named.name
+      } catch {
+        // best-effort — the default name stays in place
+      }
+      toast.success(`Created worksheet “${name}”`)
+    } catch (err) {
+      toast.error("Couldn't create worksheet", { description: (err as Error).message })
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border text-xs",
+        item.status === "error"
+          ? "border-destructive/50 bg-destructive/10 text-destructive"
+          : "border-border bg-muted/40 text-muted-foreground",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 px-2 py-1 text-left"
+      >
+        {statusIcon(item.status)}
+        <span className="font-mono">{item.name}</span>
+        {item.summary ? <span className="truncate">— {item.summary}</span> : null}
+        <ChevronRightIcon
+          className={cn("ml-auto size-3 shrink-0 transition-transform", expanded && "rotate-90")}
+        />
+      </button>
+      {expanded ? (
+        <div className="border-t border-border/60 px-2 py-1.5">
+          <pre className="max-h-60 overflow-auto rounded bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
+            {sql}
+          </pre>
+          <div className="mt-1.5 flex items-center gap-1">
+            <Button variant="ghost" size="xs" onClick={() => void copy()}>
+              <CopyIcon data-icon="inline-start" /> Copy
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              disabled={exporting}
+              onClick={() => void copyToWorksheet()}
+            >
+              {exporting ? (
+                <Loader2Icon data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <FilePlus2Icon data-icon="inline-start" />
+              )}{" "}
+              Copy to worksheet
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 export function TranscriptRow({ item }: { item: TranscriptItem }) {
   switch (item.kind) {
@@ -47,7 +158,14 @@ export function TranscriptRow({ item }: { item: TranscriptItem }) {
           </div>
         </div>
       )
-    case "tool":
+    case "tool": {
+      // run_sql calls get an expandable row exposing the SQL; a malformed
+      // input (no sql string) falls through to the generic row.
+      const sql =
+        item.name === "run_sql" ? (item.input as { sql?: unknown } | null)?.sql : undefined
+      if (typeof sql === "string" && sql.trim() !== "") {
+        return <RunSqlRow item={item} sql={sql} />
+      }
       return (
         <div
           className={cn(
@@ -57,17 +175,12 @@ export function TranscriptRow({ item }: { item: TranscriptItem }) {
               : "border-border bg-muted/40 text-muted-foreground",
           )}
         >
-          {item.status === "running" ? (
-            <Loader2Icon className="size-3 animate-spin" />
-          ) : item.status === "error" ? (
-            <XIcon className="size-3" />
-          ) : (
-            <CheckIcon className="size-3" />
-          )}
+          {statusIcon(item.status)}
           <span className="font-mono">{item.name}</span>
           {item.summary ? <span className="truncate">— {item.summary}</span> : null}
         </div>
       )
+    }
     case "sql_written":
       return (
         <div className="rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs text-muted-foreground">

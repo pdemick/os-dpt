@@ -10,6 +10,8 @@ export type TranscriptItem =
       name: AgentToolName
       status: "running" | "ok" | "error"
       summary: string
+      /** The tool_use input block. Lets rows expose call details (e.g. run_sql's SQL). */
+      input: unknown
     }
   | { id: string; kind: "sql_written"; worksheetSlug: string; length: number }
   | { id: string; kind: "chart"; spec: ChartSpec }

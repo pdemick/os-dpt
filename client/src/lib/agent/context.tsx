@@ -91,6 +91,7 @@ function apply(items: TranscriptItem[], event: AgentEvent): TranscriptItem[] {
           name: event.name,
           status: "running",
           summary: "",
+          input: event.input,
         },
       ]
     case "tool_result":
