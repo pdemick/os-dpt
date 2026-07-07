@@ -61,11 +61,24 @@ export interface ToolDefOptions {
    * Defaults to true.
    */
   worksheetBound?: boolean
+  /**
+   * Agent surface. "quick-edit" (the editor's floating prompt box) withholds
+   * render_chart (no chat surface to draw into) and ask_user_question (the box
+   * has no answer UI; the prompt tells the model to assume and note it in a
+   * SQL comment instead). Defaults to "chat".
+   */
+  mode?: "chat" | "quick-edit"
 }
 
 export function anthropicToolDefs(opts: ToolDefOptions = {}): Anthropic.Tool[] {
-  const { worksheetBound = true } = opts
-  return TOOLS.filter((t) => worksheetBound || t.name !== "write_sql").map((t) => ({
+  const { worksheetBound = true, mode = "chat" } = opts
+  const withheld = new Set<AgentToolName>()
+  if (!worksheetBound) withheld.add("write_sql")
+  if (mode === "quick-edit") {
+    withheld.add("render_chart")
+    withheld.add("ask_user_question")
+  }
+  return TOOLS.filter((t) => !withheld.has(t.name)).map((t) => ({
     name: t.name,
     description: t.description,
     input_schema: t.input_schema,

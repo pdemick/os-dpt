@@ -1,5 +1,6 @@
 import type {
   AgentEvent,
+  ChatMode,
   ChatSessionMeta,
   UsageEntry,
   UsageTotals,
@@ -11,6 +12,8 @@ export interface CreateSessionInput {
   title?: string | null
   /** Marks a Chat-page session; see ChatSessionMeta.standalone. */
   standalone?: boolean
+  /** Agent surface; see ChatSessionMeta.mode. Defaults to "chat". */
+  mode?: ChatMode
 }
 
 export interface WorksheetUsageSession {

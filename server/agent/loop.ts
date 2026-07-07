@@ -101,7 +101,10 @@ async function runTurn(opts: RunOptions): Promise<void> {
     return
   }
   const system = buildSystemPrompt(session)
-  const tools = anthropicToolDefs({ worksheetBound: !!session.meta.worksheetSlug })
+  const tools = anthropicToolDefs({
+    worksheetBound: !!session.meta.worksheetSlug,
+    mode: session.meta.mode,
+  })
 
   for (let step = 0; step < MAX_STEPS; step += 1) {
     let final: Anthropic.Message

@@ -5,6 +5,7 @@ import type Anthropic from "@anthropic-ai/sdk"
 
 import {
   emptyTotals,
+  type ChatMode,
   type ChatSessionMeta,
   type PendingAsk,
   type UsageEntry,
@@ -26,6 +27,8 @@ export interface CreateChatInput {
   title?: string | null
   /** Marks a Chat-page session; see ChatSessionMeta.standalone. */
   standalone?: boolean
+  /** Agent surface; see ChatSessionMeta.mode. Defaults to "chat". */
+  mode?: ChatMode
 }
 
 function nowIso(): string {
@@ -36,6 +39,7 @@ function freshMeta(input: CreateChatInput): ChatSessionMeta {
   const now = nowIso()
   return {
     id: crypto.randomUUID(),
+    mode: input.mode ?? "chat",
     createdAt: now,
     updatedAt: now,
     title: input.title ?? null,
@@ -60,6 +64,10 @@ function ensureUsageFields(session: ChatSession): ChatSession {
   // Sessions predating the standalone flag are all worksheet-panel origin
   // (the Chat page is newer); default them to non-standalone.
   if (typeof session.meta.standalone !== "boolean") session.meta.standalone = false
+  // Sessions predating quick-edit are all conversational.
+  if (session.meta.mode !== "chat" && session.meta.mode !== "quick-edit") {
+    session.meta.mode = "chat"
+  }
   // Sessions predating LLM auto-naming carry a (possibly truncated) title but
   // no flag; treat them as already-named so we don't re-name old chats.
   if (typeof session.meta.titleGenerated !== "boolean") {

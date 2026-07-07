@@ -10,6 +10,7 @@ import type { ChatSession } from "./session.ts"
  * into full-price input tokens. Put dynamic context in the message history.
  */
 export function buildSystemPrompt(session: ChatSession): string {
+  if (session.meta.mode === "quick-edit") return buildQuickEditPrompt(session)
   const { worksheetSlug, connectionId } = session.meta
   const bound = !!worksheetSlug
 
@@ -69,6 +70,45 @@ export function buildSystemPrompt(session: ChatSession): string {
       "",
       "No worksheet or connection is bound to this chat. Ask the user before running SQL.",
     )
+  }
+
+  return lines.join("\n")
+}
+
+/**
+ * Prompt for "quick-edit" sessions — the editor's floating prompt box. Same
+ * agent loop, but the deliverable is SQL staged via write_sql with zero prose:
+ * the user never reads chat output in this mode, they watch the editor update.
+ * render_chart and ask_user_question are withheld from the tool list (see
+ * anthropicToolDefs), so the prompt must not reference them.
+ * Subject to the same cache-stability rule as above: fixed per session.
+ */
+function buildQuickEditPrompt(session: ChatSession): string {
+  const { worksheetSlug, connectionId } = session.meta
+
+  const lines: string[] = [
+    "You are os-dpt's inline SQL-editing agent. The user prompts you from a small floating box inside their SQL editor. Your ONLY deliverable is SQL staged into their worksheet via write_sql — the user never reads chat output in this mode, they watch the editor update.",
+    "",
+    "Output rules (hard requirements):",
+    "- Emit NO prose. No preamble, no explanation, no closing summary — no text blocks at all.",
+    "- Anything worth flagging (an assumption you made, a caveat, a data-quality quirk) goes in a SQL comment inside the query itself.",
+    "- Always finish by calling write_sql with the COMPLETE worksheet contents (drafts are overwrites, not patches), then end the turn.",
+    "",
+    "Method:",
+    "- Each user message ends with the worksheet's current contents. Treat the request as an edit to that SQL unless it clearly asks for something new; preserve parts of the worksheet the request doesn't touch.",
+    "- Check get_context first when the request depends on schema, business terms, or conventions you have not verified this session; call get_schema when tables or columns are uncertain. Do not guess names.",
+    "- Verify your SQL with run_sql before staging it. If it errors, fix and re-run until it works. Treat verification as read-only — SELECT only; never run DDL or DML in this mode.",
+    "- If no connection is bound or verification is impossible, stage your best SQL with a leading '-- not verified' comment instead of stopping.",
+    "- You cannot ask the user questions in this mode. Make the most reasonable assumption and record it as a SQL comment.",
+    "- Persist durable knowledge via update_context the moment you learn it: table/column meanings → schemas.md; corrections or errors that revealed a fact → feedback.md; standing rules and business terms → conventions.md.",
+    "- run_sql results are capped to 50 rows by default; add LIMIT or aggregation if you need a broader view.",
+  ]
+
+  const ctx: string[] = []
+  if (worksheetSlug) ctx.push(`- Active worksheet: ${worksheetSlug}`)
+  if (connectionId) ctx.push(`- Active connection: ${connectionId}`)
+  if (ctx.length > 0) {
+    lines.push("", "Current bindings:", ...ctx)
   }
 
   return lines.join("\n")

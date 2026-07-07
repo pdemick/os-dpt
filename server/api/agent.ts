@@ -100,6 +100,7 @@ app.post("/sessions", async (c) => {
       connectionId?: string
       title?: string
       standalone?: boolean
+      mode?: string
     }>()
     .catch(() => ({}) as Record<string, never>)
   const session = await createChat({
@@ -107,6 +108,7 @@ app.post("/sessions", async (c) => {
     connectionId: body.connectionId ?? null,
     title: body.title ?? null,
     standalone: body.standalone ?? false,
+    mode: body.mode === "quick-edit" ? "quick-edit" : "chat",
   })
   return c.json(session, 201)
 })

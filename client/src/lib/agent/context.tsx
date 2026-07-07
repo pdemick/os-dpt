@@ -409,10 +409,13 @@ export function AgentChatProvider({
   // chats for the Chat page, or the active worksheet's chats for the side
   // panel. With no active worksheet the panel stays empty rather than falling
   // back to the standalone chats (which would collide with the Chat page).
+  // Quick-edit sessions (the editor's floating prompt box) are excluded — they
+  // are an editor affordance, not conversations to resume in the panel.
   const chatsForActive = useMemo(() => {
-    if (standalone) return allChats.filter((c) => c.standalone)
+    const chats = allChats.filter((c) => c.mode !== "quick-edit")
+    if (standalone) return chats.filter((c) => c.standalone)
     if (!worksheetSlug) return []
-    return allChats.filter((c) => !c.standalone && c.worksheetSlug === worksheetSlug)
+    return chats.filter((c) => !c.standalone && c.worksheetSlug === worksheetSlug)
   }, [allChats, standalone, worksheetSlug])
 
   const connectionId = session ? session.connectionId : (draftConnectionId ?? null)
