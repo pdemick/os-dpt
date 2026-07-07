@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import type * as React from "react"
 import {
   ActivityIcon,
@@ -26,12 +26,29 @@ export function Onboarding({ onFinished }: { onFinished: () => void }) {
   const [editingProvider, setEditingProvider] = useState<AIProvider | null>(
     null,
   )
+  // When the provider list can't load, the key steps are stuck disabled with
+  // no way past them but "Skip for now" — so surface the failure and a retry.
+  const [providersError, setProvidersError] = useState<string | null>(null)
+
+  const loadProviders = useCallback(() => {
+    return api
+      .listAIProviders()
+      .catch(() => null)
+      .then((result) => {
+        if (result?.ok) {
+          setProviders(result.data.providers)
+          setProvidersError(null)
+        } else {
+          setProvidersError(
+            result ? result.error : "Could not reach the local server.",
+          )
+        }
+      })
+  }, [])
 
   useEffect(() => {
-    void api.listAIProviders().then((result) => {
-      if (result.ok) setProviders(result.data.providers)
-    })
-  }, [])
+    void loadProviders()
+  }, [loadProviders])
 
   const anthropic = providers.find((p) => p.id === "anthropic")
   const braintrust = providers.find((p) => p.id === "braintrust")
@@ -109,6 +126,19 @@ export function Onboarding({ onFinished }: { onFinished: () => void }) {
             onAction={() => setEditingProvider(braintrust ?? null)}
           />
         </div>
+
+        {providersError && (
+          <p className="text-center text-sm text-destructive">
+            Couldn't check AI provider status: {providersError}{" "}
+            <button
+              type="button"
+              onClick={() => void loadProviders()}
+              className="underline underline-offset-2"
+            >
+              Retry
+            </button>
+          </p>
+        )}
 
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={onFinished}>
