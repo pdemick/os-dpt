@@ -3,12 +3,12 @@ import { useCallback, useEffect, useState } from "react"
 
 import { AppSidebar, type View } from "@/components/app-sidebar"
 import { CommandPalette } from "@/components/CommandPalette"
+import { Onboarding } from "@/components/onboarding"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { api } from "@/lib/api"
 import { Chat } from "@/views/Chat"
 import { Connections } from "@/views/Connections"
 import { Documentation } from "@/views/Documentation"
-import { Onboarding } from "@/views/Onboarding"
 import { Settings } from "@/views/Settings"
 import { Worksheets } from "@/views/Worksheets"
 
