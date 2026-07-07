@@ -294,6 +294,7 @@ function HistoryRow({
         selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
       )}
     >
+      {/* eslint-disable-next-line react-hooks/static-components -- sourceIcon returns an existing lucide component, it doesn't define one */}
       <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">

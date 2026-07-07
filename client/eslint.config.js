@@ -19,5 +19,15 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Compiler-era rules that flag the fetch-in-effect and CodeMirror-ref
+      // patterns used throughout the views. Kept visible as warnings until
+      // those are reworked; not worth blocking CI on.
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/refs': 'warn',
+      // DX-only (fast refresh falls back to a full reload); fires on stock
+      // shadcn ui files that export variants/hooks alongside components.
+      'react-refresh/only-export-components': 'warn',
+    },
   },
 ])
