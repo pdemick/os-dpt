@@ -1,4 +1,4 @@
-import { memo, useState } from "react"
+import { memo, useContext, useState } from "react"
 import type { ReactNode } from "react"
 import {
   CheckIcon,
@@ -12,9 +12,11 @@ import { Streamdown } from "streamdown"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { useAgent } from "@/lib/agent/context"
 import type { TranscriptItem } from "@/lib/agent/context"
 import { cn } from "@/lib/utils"
 import { api as worksheetsApi } from "@/lib/worksheets/api"
+import { WorksheetsContext } from "@/lib/worksheets/context-object"
 
 import { ChartView } from "./ChartView"
 
@@ -47,6 +49,16 @@ function RunSqlRow({
 }) {
   const [expanded, setExpanded] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const { connectionId: chatConnectionId } = useAgent()
+  // Present only when rendered inside the Worksheets view; the standalone
+  // Chat page has no provider mounted.
+  const worksheets = useContext(WorksheetsContext)
+
+  // The connection this query actually ran against: an explicit input
+  // override, else the chat's bound connection (mirrors run_sql's own
+  // resolution server-side).
+  const inputConnId = (item.input as { connection_id?: unknown } | null)?.connection_id
+  const sourceConnectionId = typeof inputConnId === "string" ? inputConnId : chatConnectionId
 
   const copy = async () => {
     try {
@@ -78,6 +90,40 @@ function RunSqlRow({
         } catch {
           // best-effort — the default name stays in place
         }
+      }
+      // Bind the new worksheet to the connection the query ran against
+      // (best-effort). Inside the Worksheets view, go through the provider —
+      // it owns the session in memory and its debounced writes would clobber
+      // a direct API write; opening the tab also surfaces the export
+      // immediately. On the standalone Chat page no provider is mounted, so
+      // patch the persisted session directly and the binding hydrates when
+      // the Worksheets view next mounts.
+      try {
+        if (worksheets) {
+          await worksheets.refreshList()
+          await worksheets.openTab(meta.slug)
+          if (sourceConnectionId) {
+            worksheets.setTabConnection(meta.slug, sourceConnectionId, { explicit: true })
+          }
+        } else if (sourceConnectionId) {
+          const session = await worksheetsApi.getSession()
+          await worksheetsApi.putSession({
+            ...session,
+            openTabs: [
+              ...session.openTabs.filter((t) => t.slug !== meta.slug),
+              {
+                slug: meta.slug,
+                cursor: { line: 0, ch: 0 },
+                scrollTop: 0,
+                connectionId: sourceConnectionId,
+                connectionExplicit: true,
+              },
+            ],
+            activeSlug: meta.slug,
+          })
+        }
+      } catch {
+        // best-effort — the worksheet exists either way, just unbound
       }
       toast.success(`Created worksheet “${name}”`)
     } catch (err) {
