@@ -49,12 +49,20 @@ export function InlineAgentBox({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (matchesShortcut(e, TOGGLE)) {
-        e.preventDefault()
-        setOpen(true)
-        // Next tick: the input may not be mounted yet when opening.
-        setTimeout(() => inputRef.current?.focus(), 0)
-      }
+      if (!matchesShortcut(e, TOGGLE)) return
+      // Don't steal the shortcut while the user is typing somewhere else
+      // (e.g. the chat side panel's composer). The CodeMirror editor is
+      // contenteditable too, but it's exactly where the shortcut should
+      // work, so it's exempted.
+      const target = e.target instanceof HTMLElement ? e.target : null
+      const typing =
+        !!target &&
+        (target.isContentEditable || !!target.closest("input, textarea, select"))
+      if (typing && !target.closest(".cm-editor")) return
+      e.preventDefault()
+      setOpen(true)
+      // Next tick: the input may not be mounted yet when opening.
+      setTimeout(() => inputRef.current?.focus(), 0)
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
