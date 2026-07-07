@@ -41,7 +41,7 @@ function ChatList() {
   const currentId = session?.id ?? null
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+    <aside className="m-2 flex w-60 shrink-0 flex-col overflow-hidden rounded-xl border border-sidebar-border bg-sidebar shadow-md">
       <div className="flex items-center justify-between border-b border-sidebar-border px-3 py-2">
         <span className="text-xs font-medium text-sidebar-foreground/70">
           Chats
@@ -127,16 +127,8 @@ function ChatRow({
 }
 
 function Conversation() {
-  const { open, items, streaming, pendingQuestion, send, answer } = useAgent()
+  const { items, streaming, pendingQuestion, send, answer } = useAgent()
   const scrollRef = useRef<HTMLDivElement>(null)
-  const ensured = useRef(false)
-
-  // Ensure a session exists once when the page mounts.
-  useEffect(() => {
-    if (ensured.current) return
-    ensured.current = true
-    void open()
-  }, [open])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -145,7 +137,7 @@ function Conversation() {
   }, [items])
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex min-w-0 flex-1 flex-col bg-background">
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-6 py-6">
           <Transcript
@@ -168,7 +160,7 @@ function Conversation() {
         </div>
       ) : null}
 
-      <div className="border-t py-3">
+      <div className="py-3">
         <div className="mx-auto w-full max-w-3xl px-6">
           <Composer
             pendingQuestion={pendingQuestion}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import type { ReactNode } from "react"
-import { DatabaseIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import { DatabaseIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
 import type { AccessMode, Connection } from "@shared/connections.ts"
 
@@ -18,6 +18,8 @@ export function Connections() {
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  // The connection being edited, or null when adding a new one.
+  const [editing, setEditing] = useState<Connection | null>(null)
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -31,17 +33,27 @@ export function Connections() {
     void refresh()
   }, [refresh])
 
-  // "New connection" quick action opens the add dialog once mounted here.
-  useAppIntent(
-    "new-connection",
-    useCallback(() => setDialogOpen(true), [])
-  )
+  const openAdd = useCallback(() => {
+    setEditing(null)
+    setDialogOpen(true)
+  }, [])
 
-  const handleCreated = (connection: Connection) => {
-    setConnections((prev) => [
-      ...prev.filter((c) => c.id !== connection.id),
-      connection,
-    ])
+  const openEdit = (connection: Connection) => {
+    setEditing(connection)
+    setDialogOpen(true)
+  }
+
+  // "New connection" quick action opens the add dialog once mounted here.
+  useAppIntent("new-connection", openAdd)
+
+  const handleSaved = (connection: Connection) => {
+    setConnections((prev) =>
+      prev.some((c) => c.id === connection.id)
+        ? // Edit: replace in place so the row keeps its position.
+          prev.map((c) => (c.id === connection.id ? connection : c))
+        : // New: append.
+          [...prev, connection],
+    )
   }
 
   const handleConnect = async (id: string) => {
@@ -103,7 +115,7 @@ export function Connections() {
             Manage database connections in this workspace.
           </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
+        <Button onClick={openAdd}>
           <PlusIcon />
           New connection
         </Button>
@@ -118,7 +130,7 @@ export function Connections() {
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : connections.length === 0 ? (
-        <EmptyState onAdd={() => setDialogOpen(true)} />
+        <EmptyState onAdd={openAdd} />
       ) : (
         <div className="flex flex-col gap-6">
           <Section title="Active" count={active.length}>
@@ -133,6 +145,7 @@ export function Connections() {
                   conn={conn}
                   busy={busyId === conn.id}
                   onDisconnect={() => handleDisconnect(conn.id)}
+                  onEdit={() => openEdit(conn)}
                   onDelete={() => handleDelete(conn.id)}
                   onAccessMode={(mode) => handleAccessMode(conn.id, mode)}
                 />
@@ -152,6 +165,7 @@ export function Connections() {
                   conn={conn}
                   busy={busyId === conn.id}
                   onConnect={() => handleConnect(conn.id)}
+                  onEdit={() => openEdit(conn)}
                   onDelete={() => handleDelete(conn.id)}
                   onAccessMode={(mode) => handleAccessMode(conn.id, mode)}
                 />
@@ -164,7 +178,8 @@ export function Connections() {
       <AddConnectionDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        onCreated={handleCreated}
+        onSaved={handleSaved}
+        connection={editing ?? undefined}
       />
     </div>
   )
@@ -195,6 +210,7 @@ type RowProps = {
   busy: boolean
   onConnect?: () => void
   onDisconnect?: () => void
+  onEdit: () => void
   onDelete: () => void
   onAccessMode: (mode: AccessMode) => void
 }
@@ -204,6 +220,7 @@ function ConnectionRow({
   busy,
   onConnect,
   onDisconnect,
+  onEdit,
   onDelete,
   onAccessMode,
 }: RowProps) {
@@ -241,6 +258,15 @@ function ConnectionRow({
             {busy ? "…" : "Connect"}
           </Button>
         )}
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          onClick={onEdit}
+          disabled={busy}
+          aria-label={`Edit ${conn.name}`}
+        >
+          <PencilIcon />
+        </Button>
         <Button
           size="icon-sm"
           variant="ghost"

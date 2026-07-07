@@ -22,11 +22,9 @@ import { cn } from "@/lib/utils"
  * active connections are selectable, since run_sql needs a live pool.
  */
 export function ChatConnectionPicker() {
-  const { session, setConnection } = useAgent()
+  const { connectionId, setConnection } = useAgent()
   const { connections, active, refresh } = useConnections()
   const [open, setOpen] = useState(false)
-
-  const connectionId = session?.connectionId ?? null
   // The bound connection may still exist but no longer be active (the user
   // disconnected it); surface its name either way so the binding is clear.
   const bound: Connection | null =

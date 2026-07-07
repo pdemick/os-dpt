@@ -64,7 +64,7 @@ export function Composer({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-input bg-input/50 transition-[color,box-shadow]",
+        "rounded-2xl border border-input bg-background shadow-sm transition-[color,box-shadow]",
         "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30",
       )}
     >

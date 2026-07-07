@@ -1,13 +1,9 @@
 import type * as React from "react"
-import { useState } from "react"
+import { useCallback, useState } from "react"
 
 import { AppSidebar, type View } from "@/components/app-sidebar"
 import { CommandPalette } from "@/components/CommandPalette"
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar"
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Chat } from "@/views/Chat"
 import { Connections } from "@/views/Connections"
 import { Documentation } from "@/views/Documentation"
@@ -22,22 +18,30 @@ const views: Record<View, React.ComponentType> = {
   settings: Settings,
 }
 
+const VIEW_KEY = "os-dpt:view"
+
 export function App() {
-  const [view, setView] = useState<View>("worksheets")
+  const [view, setView] = useState<View>(() => {
+    const saved = localStorage.getItem(VIEW_KEY)
+    return saved && saved in views ? (saved as View) : "worksheets"
+  })
+
+  const selectView = useCallback((v: View) => {
+    setView(v)
+    localStorage.setItem(VIEW_KEY, v)
+  }, [])
+
   const Active = views[view]
 
   return (
     <SidebarProvider>
-      <AppSidebar view={view} onSelect={setView} />
+      <AppSidebar view={view} onSelect={selectView} variant="floating" />
       <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
-          <SidebarTrigger />
-        </header>
         <div className="flex min-h-0 flex-1 flex-col">
           <Active />
         </div>
       </SidebarInset>
-      <CommandPalette onNavigate={setView} />
+      <CommandPalette onNavigate={selectView} />
     </SidebarProvider>
   )
 }

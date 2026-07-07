@@ -1,8 +1,12 @@
 import { promises as fs } from "node:fs"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
 import path from "node:path"
 import { HTTPException } from "hono/http-exception"
 
 import { CONTEXT_DOC_NAMES, type ContextDocName } from "@shared/context.ts"
+
+const exec = promisify(execFile)
 
 const WORKSHEETS_DIR = "worksheets"
 const CONTEXT_DIR = "context"
@@ -53,10 +57,32 @@ export async function initWorkspace(argv: string[] = process.argv.slice(2)): Pro
     )
   }
 
+  await ensureGitRepo(root)
   await ensureGitignored(root)
 
   resolved = root
   return root
+}
+
+// Worksheet/context history is backed by git (see history/git.ts). If the
+// workspace isn't already in a git work tree, init one so history works out of
+// the box. Best-effort: a missing `git` binary just logs a hint and the
+// history features stay empty (which they already degrade to gracefully).
+async function ensureGitRepo(root: string): Promise<void> {
+  try {
+    await exec("git", ["rev-parse", "--is-inside-work-tree"], { cwd: root })
+    return // already a repo
+  } catch {
+    // not a repo, or git unavailable — try to init below
+  }
+  try {
+    await exec("git", ["init"], { cwd: root })
+    console.log(`os-dpt: initialized a git repository in ${root} for worksheet history`)
+  } catch {
+    console.warn(
+      "os-dpt: git not found — worksheet history is disabled. Install git and run `git init` here to enable it.",
+    )
+  }
 }
 
 async function ensureGitignored(root: string): Promise<void> {

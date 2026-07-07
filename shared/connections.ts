@@ -33,4 +33,19 @@ export type NewConnectionInput = {
   accessMode: AccessMode
 }
 
+// Edit payload for an existing connection. Same fields as creation minus the
+// immutable `driver`; `password` is optional and an empty/absent value means
+// "keep the stored credential" (there's no way to read the current password
+// back into the form).
+export type UpdateConnectionInput = {
+  name: string
+  host: string
+  port: number
+  database: string
+  user: string
+  password?: string
+  ssl: boolean
+  accessMode: AccessMode
+}
+
 export type TestResult = { ok: true } | { ok: false; error: string }

@@ -1,8 +1,8 @@
 {
   "name": "os-dpt",
   "version": "0.0.1",
-  "private": true,
   "description": "Local web-based SQL editor with a built-in chat-to-SQL AI agent.",
+  "type": "module",
   "license": "MIT",
   "author": "Paul Demick",
   "homepage": "https://github.com/pdemick/os-dpt#readme",
@@ -22,13 +22,48 @@
     "chat-to-sql",
     "local-first"
   ],
+  "bin": {
+    "os-dpt": "bin/os-dpt.mjs"
+  },
+  "files": [
+    "bin/",
+    "server/dist/",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.12"
+  },
   "scripts": {
     "dev": "node ./scripts/dev.mjs",
     "dev:client": "pnpm --dir client dev",
     "dev:server": "pnpm --dir server dev",
-    "build": "pnpm --dir client build",
+    "build": "pnpm run build:client && pnpm run build:server",
+    "build:client": "pnpm --dir client build",
+    "build:server": "node ./scripts/build-server.mjs",
+    "start": "node bin/os-dpt.mjs",
     "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm --dir client lint"
+    "lint": "pnpm --dir client lint",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.97.0",
+    "@hono/node-server": "^1.13.7",
+    "better-sqlite3": "^12.10.0",
+    "hono": "^4.6.14",
+    "keytar": "^7.9.0",
+    "pg": "^8.13.1"
+  },
+  "peerDependencies": {
+    "braintrust": "^3.11.0"
+  },
+  "peerDependenciesMeta": {
+    "braintrust": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

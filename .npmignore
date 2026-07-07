@@ -1,0 +1,6 @@
+# Presence of this file stops npm from falling back to .gitignore when packing
+# the published tarball. Without it, .gitignore's `dist/` rule excludes the
+# built client/server even though they're in package.json "files".
+#
+# Inclusion is governed by the "files" allowlist in package.json; this file
+# only needs to not re-exclude the build output.

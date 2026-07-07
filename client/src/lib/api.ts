@@ -4,9 +4,9 @@ import type {
   AIProviderTestResult,
 } from "@shared/ai-providers.ts"
 import type {
-  AccessMode,
   Connection,
   NewConnectionInput,
+  UpdateConnectionInput,
   TestResult,
 } from "@shared/connections.ts"
 
@@ -43,7 +43,15 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
-  updateConnection: (id: string, patch: { accessMode: AccessMode }) =>
+  // Test an edit to an existing connection: a blank password falls back to the
+  // stored credential server-side, matching what saving does.
+  testConnectionById: (id: string, input: NewConnectionInput) =>
+    request<TestResult>(`/connections/${id}/test`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  updateConnection: (id: string, patch: Partial<UpdateConnectionInput>) =>
     request<{ connection: Connection }>(`/connections/${id}`, {
       method: "PATCH",
       body: JSON.stringify(patch),

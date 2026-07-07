@@ -433,7 +433,7 @@ function relativeTime(ts: number): string {
 }
 
 async function hashHex(algo: "SHA-256" | "SHA-1", bytes: Uint8Array): Promise<string> {
-  const buf = await crypto.subtle.digest(algo, bytes)
+  const buf = await crypto.subtle.digest(algo, bytes as BufferSource)
   return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("")
 }
 

@@ -11,12 +11,11 @@ import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
+  SidebarTrigger,
 } from "@/components/ui/sidebar"
 
 export type View = "worksheets" | "connections" | "chat" | "documentation" | "settings"
@@ -26,9 +25,9 @@ const navItems: {
   title: string
   icon: React.ComponentType<{ className?: string }>
 }[] = [
+  { id: "chat", title: "Chat", icon: SparklesIcon },
   { id: "worksheets", title: "Worksheets", icon: FileTextIcon },
   { id: "connections", title: "Connections", icon: DatabaseIcon },
-  { id: "chat", title: "Chat", icon: SparklesIcon },
   { id: "documentation", title: "Documentation", icon: BookOpenIcon },
   { id: "settings", title: "Settings", icon: Settings2Icon },
 ]
@@ -44,22 +43,18 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <div className="flex items-center gap-2 p-2 text-sidebar-foreground">
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <DatabaseIcon className="size-4" />
-              </div>
-              <span className="truncate text-sm font-semibold group-data-[collapsible=icon]:hidden">
-                dpt
-              </span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 p-2 text-sidebar-foreground group-data-[collapsible=icon]:hidden">
+            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+              <DatabaseIcon className="size-4" />
             </div>
-          </SidebarMenuItem>
-        </SidebarMenu>
+            <span className="truncate text-sm font-semibold">dpt</span>
+          </div>
+          <SidebarTrigger className="text-sidebar-foreground/60 group-data-[collapsible=icon]:mx-auto" />
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarMenu>
             {navItems.map((item) => (
               <SidebarMenuItem key={item.id}>
@@ -76,7 +71,6 @@ export function AppSidebar({
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarRail />
     </Sidebar>
   )
 }

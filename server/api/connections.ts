@@ -4,7 +4,7 @@ import { promises as fs } from "node:fs"
 import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
 
-import type { AccessMode, Connection, NewConnectionInput } from "@shared/connections.ts"
+import type { Connection, NewConnectionInput } from "@shared/connections.ts"
 import type { QueryOk, SQLNamespace } from "@shared/types.ts"
 
 import { CredentialVault } from "../credentials/vault.ts"
@@ -75,8 +75,71 @@ function parseInput(body: unknown): NewConnectionInput {
   }
 }
 
+// Editable fields of a stored connection. `driver`/`id`/`createdAt` are
+// immutable; the password lives in the vault, not the metadata store.
+type ConnectionPatch = Partial<Omit<StoredConnection, "id" | "driver" | "createdAt">>
+
+// Parse a PATCH body into a metadata patch plus an optional password. Only
+// validates the fields that are actually present, so both the full edit form
+// and a targeted `{ accessMode }` toggle go through the same path. An empty or
+// absent password means "keep the stored credential".
+function parsePatch(body: unknown): { patch: ConnectionPatch; password?: string } {
+  if (typeof body !== "object" || body === null) {
+    throw new Error("Invalid request body")
+  }
+  const b = body as Record<string, unknown>
+  const patch: ConnectionPatch = {}
+
+  const requireStr = (v: unknown, field: string): string => {
+    if (typeof v !== "string" || v.trim() === "") {
+      throw new Error(`Missing required field: ${field}`)
+    }
+    return v.trim()
+  }
+
+  if ("name" in b) patch.name = requireStr(b.name, "name")
+  if ("host" in b) patch.host = requireStr(b.host, "host")
+  if ("port" in b) {
+    const n = typeof b.port === "number" ? b.port : Number(b.port)
+    if (!Number.isInteger(n) || n < 1 || n > 65535) {
+      throw new Error("Invalid port: must be an integer in [1, 65535]")
+    }
+    patch.port = n
+  }
+  if ("database" in b) patch.database = requireStr(b.database, "database")
+  if ("user" in b) patch.user = requireStr(b.user, "user")
+  if ("ssl" in b) patch.ssl = Boolean(b.ssl)
+  if ("accessMode" in b) {
+    if (b.accessMode !== "read-only" && b.accessMode !== "read-write") {
+      throw new Error("accessMode must be 'read-only' or 'read-write'")
+    }
+    patch.accessMode = b.accessMode
+  }
+
+  const password =
+    typeof b.password === "string" && b.password !== "" ? b.password : undefined
+  return { patch, password }
+}
+
 function toApi(conn: StoredConnection, active: Set<string>): Connection {
   return { ...conn, active: active.has(conn.id) }
+}
+
+// A throwaway connection used only to dial the database in a test probe; never
+// persisted, so the id/createdAt are placeholders.
+function buildProbe(input: NewConnectionInput): StoredConnection {
+  return {
+    id: "probe",
+    name: input.name,
+    driver: "postgres",
+    host: input.host,
+    port: input.port,
+    database: input.database,
+    user: input.user,
+    ssl: input.ssl,
+    accessMode: input.accessMode,
+    createdAt: new Date().toISOString(),
+  }
 }
 
 type ConnectResult = { ok: true } | { ok: false; error: string; status: number }
@@ -181,22 +244,24 @@ export function connectionsRouter(workspace: string): Hono {
   router.patch("/:id", async (c) => {
     const id = c.req.param("id")
     assertSafeConnectionId(id)
-    let accessMode: AccessMode
+    let parsed
     try {
-      const body = (await c.req.json()) as { accessMode?: unknown }
-      if (body.accessMode !== "read-only" && body.accessMode !== "read-write") {
-        return c.json({ error: "accessMode must be 'read-only' or 'read-write'" }, 400)
-      }
-      accessMode = body.accessMode
-    } catch {
-      return c.json({ error: "Invalid JSON body" }, 400)
+      parsed = parsePatch(await c.req.json())
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 400)
     }
-    const updated = await store.update(id, { accessMode })
+    const updated = await store.update(id, parsed.patch)
     if (!updated) return c.json({ error: "not_found" }, 404)
-    // If the connection is live, recreate its pool so the new mode applies now;
-    // the read-only GUC is fixed at connection startup. If the reconnect fails,
-    // drop the pool rather than leave a write-capable session mislabeled
-    // read-only.
+    // Write the new password (if any) before any reconnect so the live pool
+    // picks up the updated credential.
+    if (parsed.password !== undefined) {
+      await vault.setPassword(id, parsed.password)
+    }
+    // If the connection is live, recreate its pool so the edit applies now: the
+    // read-only GUC is fixed at connection startup, and host/port/user/password
+    // changes only take effect on a fresh pool. If the reconnect fails (e.g. a
+    // bad new host), drop the pool rather than leave a stale session running
+    // under changed metadata.
     if (getPool(id)) {
       const result = await connectStored(id, store, vault)
       if (!result.ok) {
@@ -224,20 +289,41 @@ export function connectionsRouter(workspace: string): Hono {
     } catch (err) {
       return c.json({ ok: false, error: (err as Error).message }, 400)
     }
-    const probe: StoredConnection = {
-      id: "probe",
-      name: input.name,
-      driver: "postgres",
-      host: input.host,
-      port: input.port,
-      database: input.database,
-      user: input.user,
-      ssl: input.ssl,
-      accessMode: input.accessMode,
-      createdAt: new Date().toISOString(),
+    try {
+      await testConnection(buildProbe(input), input.password)
+      return c.json({ ok: true })
+    } catch (err) {
+      return c.json({ ok: false, error: (err as Error).message }, 400)
+    }
+  })
+
+  // Test an edit against an existing connection: probe with the submitted
+  // (edited) fields, but fall back to the stored password when the form leaves
+  // it blank — mirroring how PATCH keeps the existing credential. Without this,
+  // testing an edit you didn't retype the password for would fail auth even
+  // though saving would succeed.
+  router.post("/:id/test", async (c) => {
+    const id = c.req.param("id")
+    assertSafeConnectionId(id)
+    let input
+    try {
+      input = parseInput(await c.req.json())
+    } catch (err) {
+      return c.json({ ok: false, error: (err as Error).message }, 400)
+    }
+    let password = input.password
+    if (!password) {
+      const stored = await vault.getPassword(id)
+      if (stored === null) {
+        return c.json(
+          { ok: false, error: "No stored password — enter one to test." },
+          400,
+        )
+      }
+      password = stored
     }
     try {
-      await testConnection(probe, input.password)
+      await testConnection(buildProbe(input), password)
       return c.json({ ok: true })
     } catch (err) {
       return c.json({ ok: false, error: (err as Error).message }, 400)

@@ -41,6 +41,25 @@ connection (Postgres to start), then open a worksheet or the chat panel.
 You'll need an Anthropic API key for the agent — set it in **Settings → AI
 providers**.
 
+To install it globally instead:
+
+```bash
+npm install -g os-dpt
+os-dpt
+```
+
+### Options
+
+```
+os-dpt [options]
+
+  --workspace <dir>   Workspace directory (default: current directory)
+  --port <n>          Preferred port (default: 3756, falls back if taken)
+  --no-open           Don't open the browser automatically
+  -v, --version       Print version
+  -h, --help          Show this help
+```
+
 ## Workspace layout
 
 os-dpt treats your current directory as the workspace root (like `git` or
@@ -57,6 +76,9 @@ os-dpt treats your current directory as the workspace root (like `git` or
 
 Anything sensitive lives in `.os-dpt/` and is gitignored. Anything worth
 versioning — your queries and the agent's context — is plain text at the root.
+
+If the directory isn't already a git repository, os-dpt runs `git init` so
+worksheet/context history works out of the box.
 
 ## How the agent works
 

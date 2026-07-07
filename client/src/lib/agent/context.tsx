@@ -31,6 +31,11 @@ interface AgentContextValue {
   answer(text: string): Promise<void>
   /** Bind the connection the agent's run_sql targets for this chat. */
   setConnection(connectionId: string | null): Promise<void>
+  /**
+   * Connection the chat is (or will be) bound to: the session's binding once
+   * one exists, else the local draft applied when the session is created.
+   */
+  connectionId: string | null
   /** Past chats whose `worksheetSlug` matches the active worksheet. */
   chatsForActive: ChatSessionMeta[]
   /**
@@ -45,6 +50,9 @@ interface AgentContextValue {
 }
 
 const AgentContext = createContext<AgentContextValue | null>(null)
+
+/** localStorage key remembering the Chat page's open conversation. */
+const LAST_CHAT_KEY = "os-dpt:last-chat-id"
 
 function rid(): string {
   return Math.random().toString(36).slice(2, 10)
@@ -165,6 +173,11 @@ export function AgentChatProvider({
   const [streaming, setStreaming] = useState(false)
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null)
   const [allChats, setAllChats] = useState<ChatSessionMeta[]>([])
+  // Connection choice made before the session exists. Sessions are created
+  // lazily on the first message (so empty "Untitled" chats never persist);
+  // until then the picker's choice lives here. `undefined` = untouched, so
+  // session creation falls back to the first active connection.
+  const [draftConnectionId, setDraftConnectionId] = useState<string | null | undefined>(undefined)
 
   // ref for the bound worksheet slug so consume()/newChat() pick up the live
   // value when the user has switched tabs mid-conversation.
@@ -192,9 +205,23 @@ export function AgentChatProvider({
     void refreshChats()
   }, [refreshChats, worksheetSlug])
 
+
+  // Default the draft binding to the first active connection so the picker
+  // badge reflects what a new session will be bound to.
+  useEffect(() => {
+    let cancelled = false
+    void firstActiveConnectionId().then((id) => {
+      if (!cancelled) setDraftConnectionId((cur) => (cur === undefined ? id : cur))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const ensureSession = useCallback(async (): Promise<ChatSessionMeta> => {
     if (session) return session
-    const connectionId = await firstActiveConnectionId()
+    const connectionId =
+      draftConnectionId !== undefined ? draftConnectionId : await firstActiveConnectionId()
     const res = await agentApi.createSession({
       worksheetSlug,
       connectionId,
@@ -202,7 +229,7 @@ export function AgentChatProvider({
     })
     setSession(res.meta)
     return res.meta
-  }, [session, worksheetSlug, standalone])
+  }, [session, draftConnectionId, worksheetSlug, standalone])
 
   const consume = useCallback(
     async (stream: AsyncGenerator<AgentEvent>) => {
@@ -225,33 +252,26 @@ export function AgentChatProvider({
     [onSqlWritten],
   )
 
+  // Opening the panel doesn't create a session — that happens lazily on the
+  // first message (send() → ensureSession), so browsing around never leaves
+  // empty "Untitled" chats behind.
   const open = useCallback(async () => {
     setIsOpen(true)
-    await ensureSession()
-  }, [ensureSession])
+  }, [])
 
   const close = useCallback(() => {
     setIsOpen(false)
   }, [])
 
   const newChat = useCallback(async () => {
-    if (session) {
-      await agentApi.deleteSession(session.id).catch(() => {})
-    }
+    // Just reset the panel — the session (and its history entry) is created
+    // when the user actually sends a message. The previous chat stays as-is.
     setSession(null)
     setItems([])
     setPendingQuestion(null)
     setStreaming(false)
-    // recreate immediately so the panel is ready to send
-    const connectionId = await firstActiveConnectionId()
-    const res = await agentApi.createSession({
-      worksheetSlug: activeSlugRef.current,
-      connectionId,
-      standalone,
-    })
-    setSession(res.meta)
-    await refreshChats()
-  }, [session, refreshChats, standalone])
+    setDraftConnectionId(await firstActiveConnectionId())
+  }, [])
 
   const loadSession = useCallback(
     async (id: string) => {
@@ -264,6 +284,28 @@ export function AgentChatProvider({
     },
     [],
   )
+
+  // Keep the standalone Chat page's conversation across refreshes and view
+  // switches: remember the open session's id and reload it on mount. The
+  // guard ref makes the first run restore-only, so the initial null session
+  // doesn't clear the saved id before it's read.
+  const restoredChatRef = useRef(false)
+  useEffect(() => {
+    if (!standalone) return
+    if (!restoredChatRef.current) {
+      restoredChatRef.current = true
+      const saved = localStorage.getItem(LAST_CHAT_KEY)
+      if (saved) {
+        loadSession(saved).catch(() => {
+          // stale id (chat deleted since) — forget it
+          localStorage.removeItem(LAST_CHAT_KEY)
+        })
+      }
+      return
+    }
+    if (session) localStorage.setItem(LAST_CHAT_KEY, session.id)
+    else localStorage.removeItem(LAST_CHAT_KEY)
+  }, [standalone, session, loadSession])
 
   const deleteChat = useCallback(
     async (id: string) => {
@@ -350,11 +392,16 @@ export function AgentChatProvider({
 
   const setConnection = useCallback(
     async (connectionId: string | null) => {
-      const meta = await ensureSession()
-      const updated = await agentApi.updateSession(meta.id, { connectionId })
+      // No session yet: stash the choice locally; it's applied when the first
+      // message creates the session.
+      if (!session) {
+        setDraftConnectionId(connectionId)
+        return
+      }
+      const updated = await agentApi.updateSession(session.id, { connectionId })
       setSession(updated)
     },
-    [ensureSession],
+    [session],
   )
 
   // Chats relevant to this surface's binding: the standalone (null-worksheet)
@@ -366,6 +413,8 @@ export function AgentChatProvider({
     if (!worksheetSlug) return []
     return allChats.filter((c) => !c.standalone && c.worksheetSlug === worksheetSlug)
   }, [allChats, standalone, worksheetSlug])
+
+  const connectionId = session ? session.connectionId : (draftConnectionId ?? null)
 
   // The worksheet panel with no active worksheet: the agent runs read-only
   // (write_sql is withheld server-side because worksheetSlug is null). The
@@ -385,6 +434,7 @@ export function AgentChatProvider({
       send,
       answer,
       setConnection,
+      connectionId,
       chatsForActive,
       exploreOnly,
       loadSession,
@@ -402,6 +452,7 @@ export function AgentChatProvider({
       send,
       answer,
       setConnection,
+      connectionId,
       chatsForActive,
       exploreOnly,
       loadSession,

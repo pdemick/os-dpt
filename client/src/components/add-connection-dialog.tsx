@@ -1,7 +1,12 @@
-import { useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import type { ReactNode } from "react"
 
-import type { AccessMode, Connection, NewConnectionInput } from "@shared/connections.ts"
+import type {
+  AccessMode,
+  Connection,
+  NewConnectionInput,
+  UpdateConnectionInput,
+} from "@shared/connections.ts"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -41,6 +46,21 @@ const emptyForm: FormState = {
   accessMode: "read-only",
 }
 
+function formFromConnection(conn: Connection): FormState {
+  return {
+    name: conn.name,
+    host: conn.host,
+    port: String(conn.port),
+    database: conn.database,
+    user: conn.user,
+    // The stored password can't be read back, so the field starts blank; an
+    // empty value on save means "keep the existing credential".
+    password: "",
+    ssl: conn.ssl,
+    accessMode: conn.accessMode,
+  }
+}
+
 function toInput(form: FormState): NewConnectionInput {
   return {
     name: form.name.trim(),
@@ -55,13 +75,35 @@ function toInput(form: FormState): NewConnectionInput {
   }
 }
 
+function toUpdateInput(form: FormState): UpdateConnectionInput {
+  return {
+    name: form.name.trim(),
+    host: form.host.trim(),
+    port: Number(form.port),
+    database: form.database.trim(),
+    user: form.user.trim(),
+    // Blank = keep the stored credential.
+    password: form.password || undefined,
+    ssl: form.ssl,
+    accessMode: form.accessMode,
+  }
+}
+
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreated: (connection: Connection) => void
+  onSaved: (connection: Connection) => void
+  // When provided, the dialog edits this connection instead of creating one.
+  connection?: Connection
 }
 
-export function AddConnectionDialog({ open, onOpenChange, onCreated }: Props) {
+export function AddConnectionDialog({
+  open,
+  onOpenChange,
+  onSaved,
+  connection,
+}: Props) {
+  const isEdit = connection != null
   const [form, setForm] = useState<FormState>(emptyForm)
   const [busy, setBusy] = useState<"test" | "save" | null>(null)
   const [message, setMessage] = useState<
@@ -70,20 +112,23 @@ export function AddConnectionDialog({ open, onOpenChange, onCreated }: Props) {
   // Bumped on close so in-flight requests skip applying their result.
   const generationRef = useRef(0)
 
+  // Seed the form whenever the dialog opens: from the connection being edited,
+  // or empty defaults for a new one.
+  useEffect(() => {
+    if (open) {
+      setForm(connection ? formFromConnection(connection) : emptyForm)
+      setMessage(null)
+      setBusy(null)
+    }
+  }, [open, connection])
+
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
-  }
-
-  const reset = () => {
-    setForm(emptyForm)
-    setMessage(null)
-    setBusy(null)
   }
 
   const handleOpenChange = (next: boolean) => {
     if (!next) {
       generationRef.current += 1
-      reset()
     }
     onOpenChange(next)
   }
@@ -92,7 +137,10 @@ export function AddConnectionDialog({ open, onOpenChange, onCreated }: Props) {
     const gen = generationRef.current
     setBusy("test")
     setMessage(null)
-    const result = await api.testConnection(toInput(form))
+    const result =
+      isEdit && connection
+        ? await api.testConnectionById(connection.id, toInput(form))
+        : await api.testConnection(toInput(form))
     if (gen !== generationRef.current) return
     setBusy(null)
     if (result.ok) setMessage({ kind: "success", text: "Connection succeeded." })
@@ -103,11 +151,14 @@ export function AddConnectionDialog({ open, onOpenChange, onCreated }: Props) {
     const gen = generationRef.current
     setBusy("save")
     setMessage(null)
-    const result = await api.createConnection(toInput(form))
+    const result =
+      isEdit && connection
+        ? await api.updateConnection(connection.id, toUpdateInput(form))
+        : await api.createConnection(toInput(form))
     if (gen !== generationRef.current) return
     setBusy(null)
     if (result.ok) {
-      onCreated(result.data.connection)
+      onSaved(result.data.connection)
       handleOpenChange(false)
     } else {
       setMessage({ kind: "error", text: result.error })
@@ -118,7 +169,9 @@ export function AddConnectionDialog({ open, onOpenChange, onCreated }: Props) {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Postgres connection</DialogTitle>
+          <DialogTitle>
+            {isEdit ? "Edit Postgres connection" : "Add Postgres connection"}
+          </DialogTitle>
           <DialogDescription>
             Credentials are encrypted with a key in your OS keychain and stored in{" "}
             <code>.os-dpt/credentials.enc</code>.
@@ -188,6 +241,7 @@ export function AddConnectionDialog({ open, onOpenChange, onCreated }: Props) {
                 value={form.password}
                 onChange={(e) => update("password", e.target.value)}
                 autoComplete="new-password"
+                placeholder={isEdit ? "Leave blank to keep current" : undefined}
               />
             </Field>
           </div>
@@ -236,7 +290,7 @@ export function AddConnectionDialog({ open, onOpenChange, onCreated }: Props) {
               {busy === "test" ? "Testing…" : "Test"}
             </Button>
             <Button type="submit" disabled={busy !== null}>
-              {busy === "save" ? "Saving…" : "Save"}
+              {busy === "save" ? "Saving…" : isEdit ? "Save changes" : "Save"}
             </Button>
           </DialogFooter>
         </form>
