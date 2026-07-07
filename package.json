@@ -68,7 +68,9 @@
   },
   "pnpm": {
     "overrides": {
-      "braintrust": "^3.20.0"
+      "braintrust": "^3.20.0",
+      "@babel/core@<7.29.6": "^7.29.6",
+      "esbuild@>=0.27.3 <0.28.1": "0.28.1"
     },
     "onlyBuiltDependencies": [
       "better-sqlite3",
