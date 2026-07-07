@@ -29,15 +29,26 @@ export function App() {
   })
 
   // null = still checking (the normal shell renders optimistically rather than
-  // blocking first paint on the request); true = fresh workspace with no
-  // connections yet. "Skip for now" only clears it for this page load, so the
-  // setup screen returns on reload until a first connection exists.
+  // blocking first paint on the requests); true = fresh workspace. A workspace
+  // counts as fresh only when it has no connections AND no configured AI
+  // provider — a configured key means the user has been here before (e.g. they
+  // deleted their last connection), and re-running setup would be noise.
+  // "Skip for now" only clears it for this page load, so the setup screen
+  // returns on reload while the workspace is still fresh.
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null)
 
   useEffect(() => {
-    void api.listConnections().then((result) => {
-      setShowOnboarding(result.ok ? result.data.connections.length === 0 : false)
-    })
+    void Promise.all([api.listConnections(), api.listAIProviders()]).then(
+      ([connections, providers]) => {
+        // A failed fetch counts as "not fresh" so errors fall through to the
+        // normal shell instead of trapping the user in onboarding.
+        const noConnections =
+          connections.ok && connections.data.connections.length === 0
+        const noConfiguredProviders =
+          providers.ok && providers.data.providers.every((p) => !p.configured)
+        setShowOnboarding(noConnections && noConfiguredProviders)
+      },
+    )
   }, [])
 
   const selectView = useCallback((v: View) => {

@@ -16,8 +16,9 @@ import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-// First-run setup screen, shown by App when the workspace has no connections.
-// Steps complete in any order; only the first two gate the primary button.
+// First-run setup screen, shown by App when the workspace is fresh (no
+// connections and no configured AI provider). Steps complete in any order;
+// only the first two gate the primary button.
 export function Onboarding({ onFinished }: { onFinished: () => void }) {
   const [connections, setConnections] = useState<Connection[]>([])
   const [providers, setProviders] = useState<AIProvider[]>([])
