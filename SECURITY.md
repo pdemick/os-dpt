@@ -72,5 +72,7 @@ only authoritative boundary.
 ## Reporting a vulnerability
 
 Please report security issues privately rather than opening a public issue:
-email **78264807+pdemick@users.noreply.github.com** with details and, if possible, a reproduction. We
-will acknowledge and work on a fix before any public disclosure.
+use [GitHub's private vulnerability reporting](https://github.com/pdemick/os-dpt/security/advisories/new)
+("Report a vulnerability" under the Security tab) with details and, if
+possible, a reproduction. We will acknowledge and work on a fix before any
+public disclosure.
