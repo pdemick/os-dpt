@@ -76,9 +76,9 @@ export function InlineAgentBox({
     [],
   )
 
-  // Abort any in-flight run and reset the status line. Note this only stops
-  // the client from consuming events (in particular, sql_written no longer
-  // lands in the buffer) — the server finishes the turn on its own.
+  // Abort any in-flight run and reset the status line. The dropped connection
+  // also aborts the turn server-side at its next safe point, so a canceled
+  // run's write_sql never lands in the buffer OR the on-disk draft.
   const cancel = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null

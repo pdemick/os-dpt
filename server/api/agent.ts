@@ -232,7 +232,12 @@ app.post("/sessions/:id/messages", async (c) => {
   }
 
   return streamSSE(c, async (stream) => {
+    // Aborts when the client disconnects (quick-edit cancel, closed tab).
+    // The loop stops at its next safe point instead of running the turn to
+    // completion, and emits to the dead stream become no-ops.
+    const signal = c.req.raw.signal
     const emit = async (event: AgentEvent) => {
+      if (signal.aborted) return
       await stream.writeSSE({ data: JSON.stringify(event) })
     }
     try {
@@ -261,7 +266,7 @@ app.post("/sessions/:id/messages", async (c) => {
         if (!session.meta.title) {
           await setTitle(session, message.slice(0, 60))
         }
-        await runAgentTurn({ session, emit })
+        await runAgentTurn({ session, emit, signal })
       })
     } catch (err) {
       await emit({ type: "error", message: (err as Error).message })
@@ -285,7 +290,10 @@ app.post("/sessions/:id/respond", async (c) => {
   }
 
   return streamSSE(c, async (stream) => {
+    // Same disconnect handling as /messages above.
+    const signal = c.req.raw.signal
     const emit = async (event: AgentEvent) => {
+      if (signal.aborted) return
       await stream.writeSSE({ data: JSON.stringify(event) })
     }
     try {
@@ -302,7 +310,7 @@ app.post("/sessions/:id/respond", async (c) => {
           })
           return
         }
-        await resumeWithAnswer({ session, userAnswer: answer, emit })
+        await resumeWithAnswer({ session, userAnswer: answer, emit, signal })
       })
     } catch (err) {
       await emit({ type: "error", message: (err as Error).message })
