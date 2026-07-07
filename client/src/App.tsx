@@ -28,9 +28,10 @@ export function App() {
     return saved && saved in views ? (saved as View) : "worksheets"
   })
 
-  // null = still checking; true = fresh workspace with no connections yet.
-  // "Skip for now" only clears it for this page load, so the setup screen
-  // returns on reload until a first connection exists.
+  // null = still checking (the normal shell renders optimistically rather than
+  // blocking first paint on the request); true = fresh workspace with no
+  // connections yet. "Skip for now" only clears it for this page load, so the
+  // setup screen returns on reload until a first connection exists.
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -46,7 +47,6 @@ export function App() {
 
   const Active = views[view]
 
-  if (showOnboarding === null) return null
   if (showOnboarding) {
     return <Onboarding onFinished={() => setShowOnboarding(false)} />
   }
