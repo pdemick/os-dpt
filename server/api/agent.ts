@@ -19,6 +19,7 @@ import {
   listChats,
   setConnection,
   setTitle,
+  trimQuickEditHistory,
 } from "../agent/session.ts"
 
 const app = new Hono()
@@ -100,6 +101,7 @@ app.post("/sessions", async (c) => {
       connectionId?: string
       title?: string
       standalone?: boolean
+      mode?: string
     }>()
     .catch(() => ({}) as Record<string, never>)
   const session = await createChat({
@@ -107,6 +109,7 @@ app.post("/sessions", async (c) => {
     connectionId: body.connectionId ?? null,
     title: body.title ?? null,
     standalone: body.standalone ?? false,
+    mode: body.mode === "quick-edit" ? "quick-edit" : "chat",
   })
   return c.json(session, 201)
 })
@@ -230,7 +233,12 @@ app.post("/sessions/:id/messages", async (c) => {
   }
 
   return streamSSE(c, async (stream) => {
+    // Aborts when the client disconnects (quick-edit cancel, closed tab).
+    // The loop stops at its next safe point instead of running the turn to
+    // completion, and emits to the dead stream become no-ops.
+    const signal = c.req.raw.signal
     const emit = async (event: AgentEvent) => {
+      if (signal.aborted) return
       await stream.writeSSE({ data: JSON.stringify(event) })
     }
     try {
@@ -250,6 +258,10 @@ app.post("/sessions/:id/messages", async (c) => {
           })
           return
         }
+        // Quick-edit sessions reuse one hidden session per worksheet; cap
+        // their history here so cost doesn't grow without bound. In-memory
+        // mutation only — the appendMessage below persists it.
+        trimQuickEditHistory(session)
         // The user message + auto-title are persisted BEFORE the loop
         // runs. If runAgentTurn throws mid-stream the message is on
         // disk but the client saw no reply — do NOT add a client-side
@@ -259,7 +271,7 @@ app.post("/sessions/:id/messages", async (c) => {
         if (!session.meta.title) {
           await setTitle(session, message.slice(0, 60))
         }
-        await runAgentTurn({ session, emit })
+        await runAgentTurn({ session, emit, signal })
       })
     } catch (err) {
       await emit({ type: "error", message: (err as Error).message })
@@ -283,7 +295,10 @@ app.post("/sessions/:id/respond", async (c) => {
   }
 
   return streamSSE(c, async (stream) => {
+    // Same disconnect handling as /messages above.
+    const signal = c.req.raw.signal
     const emit = async (event: AgentEvent) => {
+      if (signal.aborted) return
       await stream.writeSSE({ data: JSON.stringify(event) })
     }
     try {
@@ -300,7 +315,7 @@ app.post("/sessions/:id/respond", async (c) => {
           })
           return
         }
-        await resumeWithAnswer({ session, userAnswer: answer, emit })
+        await resumeWithAnswer({ session, userAnswer: answer, emit, signal })
       })
     } catch (err) {
       await emit({ type: "error", message: (err as Error).message })

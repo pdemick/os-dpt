@@ -35,8 +35,17 @@ export interface ChartSpec {
   data: Record<string, unknown>[]
 }
 
+/**
+ * How a session drives the agent. "chat" is the conversational surface
+ * (side panel / Chat page). "quick-edit" is the editor's floating prompt box:
+ * same agent loop, but the prompt demands SQL-only output via write_sql (no
+ * prose) and the chart/ask-user tools are withheld.
+ */
+export type ChatMode = "chat" | "quick-edit"
+
 export interface ChatSessionMeta {
   id: string
+  mode: ChatMode
   createdAt: string
   updatedAt: string
   title: string | null

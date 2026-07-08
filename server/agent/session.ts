@@ -5,6 +5,7 @@ import type Anthropic from "@anthropic-ai/sdk"
 
 import {
   emptyTotals,
+  type ChatMode,
   type ChatSessionMeta,
   type PendingAsk,
   type UsageEntry,
@@ -26,6 +27,8 @@ export interface CreateChatInput {
   title?: string | null
   /** Marks a Chat-page session; see ChatSessionMeta.standalone. */
   standalone?: boolean
+  /** Agent surface; see ChatSessionMeta.mode. Defaults to "chat". */
+  mode?: ChatMode
 }
 
 function nowIso(): string {
@@ -36,6 +39,7 @@ function freshMeta(input: CreateChatInput): ChatSessionMeta {
   const now = nowIso()
   return {
     id: crypto.randomUUID(),
+    mode: input.mode ?? "chat",
     createdAt: now,
     updatedAt: now,
     title: input.title ?? null,
@@ -60,6 +64,10 @@ function ensureUsageFields(session: ChatSession): ChatSession {
   // Sessions predating the standalone flag are all worksheet-panel origin
   // (the Chat page is newer); default them to non-standalone.
   if (typeof session.meta.standalone !== "boolean") session.meta.standalone = false
+  // Sessions predating quick-edit are all conversational.
+  if (session.meta.mode !== "chat" && session.meta.mode !== "quick-edit") {
+    session.meta.mode = "chat"
+  }
   // Sessions predating LLM auto-naming carry a (possibly truncated) title but
   // no flag; treat them as already-named so we don't re-name old chats.
   if (typeof session.meta.titleGenerated !== "boolean") {
@@ -109,6 +117,36 @@ export async function listChats(): Promise<ChatSessionMeta[]> {
 export async function deleteChat(id: string): Promise<void> {
   assertSafeChatId(id)
   await fs.rm(paths.chat(id), { force: true })
+}
+
+// Quick-edit sessions are hidden, one per worksheet, and reused indefinitely;
+// every prompt re-embeds the full worksheet contents, so old turns lose value
+// fast while their tokens keep billing on every call. Cap the history by
+// dropping whole turns from the front once it exceeds MAX, cutting down to
+// KEEP. The MAX/KEEP gap is hysteresis: a trim shifts the conversation's
+// prompt-cache prefix (one full re-read), so trim in chunks every few turns
+// rather than sliding the window on every message.
+const QUICK_EDIT_MAX_TURNS = 8
+const QUICK_EDIT_KEEP_TURNS = 4
+
+/**
+ * Drop oldest turns from a quick-edit session once it exceeds the cap.
+ * No-op for chat sessions. Mutates in memory only — callers persist via the
+ * next appendMessage/persistSession.
+ */
+export function trimQuickEditHistory(session: ChatSession): void {
+  if (session.meta.mode !== "quick-edit") return
+  // A turn starts at a plain-string user message (live prompts are persisted
+  // as strings; tool_results are block arrays), so cutting at one never
+  // orphans a tool_use/tool_result pair.
+  const turnStarts: number[] = []
+  session.messages.forEach((m, i) => {
+    if (m.role === "user" && typeof m.content === "string") turnStarts.push(i)
+  })
+  if (turnStarts.length <= QUICK_EDIT_MAX_TURNS) return
+  session.messages = session.messages.slice(
+    turnStarts[turnStarts.length - QUICK_EDIT_KEEP_TURNS],
+  )
 }
 
 export async function appendMessage(

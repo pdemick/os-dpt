@@ -6,6 +6,7 @@ import type { AgentTool } from "./index.ts"
 
 interface Input {
   sql?: string
+  name?: string
   connection_id?: string
   row_limit?: number
 }
@@ -38,9 +39,15 @@ export const runSqlTool: AgentTool = {
     "to confirm.",
   input_schema: {
     type: "object",
-    required: ["sql"],
+    required: ["sql", "name"],
     properties: {
       sql: { type: "string", description: "SQL to execute." },
+      name: {
+        type: "string",
+        description:
+          "A short human-readable name for this query (3–6 words) describing what it does, " +
+          'e.g. "Monthly revenue by region". Shown in the UI next to the query.',
+      },
       connection_id: {
         type: "string",
         description: "Connection UUID. Defaults to the chat's bound connection.",

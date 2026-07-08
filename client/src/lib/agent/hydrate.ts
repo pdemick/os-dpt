@@ -58,6 +58,7 @@ export function hydrateMessages(messages: unknown): TranscriptItem[] {
               name: block.name as AgentToolName,
               status: "ok",
               summary: "",
+              input: block.input,
             })
           }
         }

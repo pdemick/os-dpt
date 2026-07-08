@@ -7,6 +7,7 @@ import { AgentHistoryPanel } from "@/components/agent/AgentHistoryPanel"
 import type { HistorySkipReason } from "@shared/types"
 import { CodeMirrorEditor } from "./CodeMirrorEditor"
 import { HistoryPanel } from "./HistoryPanel"
+import { InlineAgentBox } from "./InlineAgentBox"
 
 export function ActiveEditor() {
   const {
@@ -72,7 +73,7 @@ export function ActiveEditor() {
           onDismiss={() => clearHistoryWarning(slug)}
         />
       )}
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
         <CodeMirrorEditor
           key={slug}
           value={file.buffer}
@@ -83,6 +84,12 @@ export function ActiveEditor() {
           schema={schema}
           initialCursor={tab?.cursor}
           initialScrollTop={tab?.scrollTop}
+        />
+        <InlineAgentBox
+          slug={slug}
+          connectionId={tab?.connectionId ?? null}
+          buffer={file.buffer}
+          onSql={updateBuffer}
         />
       </div>
       <HistoryPanel

@@ -40,6 +40,9 @@ export interface StreamParams {
   model?: string
   maxTokens?: number
   onTextDelta?: (delta: string) => void
+  /** Cancels the request mid-generation (client disconnected); the returned
+   *  promise rejects with the SDK's abort error. */
+  signal?: AbortSignal
 }
 
 export interface StreamResult {
@@ -119,17 +122,20 @@ export async function streamAssistantMessage(
       },
     },
     async (span) => {
-      const stream = client.messages.stream({
-        model,
-        max_tokens: maxTokens,
-        system: cachedSystem(p.system),
-        messages: withConversationCacheBreakpoint(p.messages),
-        tools: p.tools,
-        // One tool_use per assistant turn so the loop can cleanly handle the
-        // ask_user_question pause without leaving sibling tool_use blocks
-        // without matching tool_results.
-        tool_choice: { type: "auto", disable_parallel_tool_use: true },
-      })
+      const stream = client.messages.stream(
+        {
+          model,
+          max_tokens: maxTokens,
+          system: cachedSystem(p.system),
+          messages: withConversationCacheBreakpoint(p.messages),
+          tools: p.tools,
+          // One tool_use per assistant turn so the loop can cleanly handle the
+          // ask_user_question pause without leaving sibling tool_use blocks
+          // without matching tool_results.
+          tool_choice: { type: "auto", disable_parallel_tool_use: true },
+        },
+        { signal: p.signal },
+      )
       if (p.onTextDelta) {
         stream.on("text", (delta) => p.onTextDelta?.(delta))
       }

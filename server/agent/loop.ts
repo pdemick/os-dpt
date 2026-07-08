@@ -26,6 +26,15 @@ export type Emitter = (event: AgentEvent) => void | Promise<void>
 export interface RunOptions {
   session: ChatSession
   emit: Emitter
+  /**
+   * Aborted when the SSE client disconnects (quick-edit cancel, closed tab).
+   * The loop stops at the next safe point — before the next model call, or
+   * before executing a tool — so a canceled run never runs side-effecting
+   * tools (e.g. write_sql overwriting the worksheet draft) after the user
+   * walked away. Un-executed tool_uses get synthesized error tool_results so
+   * the persisted history stays resumable.
+   */
+  signal?: AbortSignal
 }
 
 function toolUseBlocks(msg: Anthropic.Message): Anthropic.ToolUseBlock[] {
@@ -92,7 +101,7 @@ export async function runAgentTurn(opts: RunOptions): Promise<void> {
 }
 
 async function runTurn(opts: RunOptions): Promise<void> {
-  const { session, emit } = opts
+  const { session, emit, signal } = opts
   let apiKey: string
   try {
     apiKey = await getAnthropicKey()
@@ -101,9 +110,16 @@ async function runTurn(opts: RunOptions): Promise<void> {
     return
   }
   const system = buildSystemPrompt(session)
-  const tools = anthropicToolDefs({ worksheetBound: !!session.meta.worksheetSlug })
+  const tools = anthropicToolDefs({
+    worksheetBound: !!session.meta.worksheetSlug,
+    mode: session.meta.mode,
+  })
 
   for (let step = 0; step < MAX_STEPS; step += 1) {
+    // Client gone — stop before paying for another model call. History is at
+    // a safe boundary here: it ends with a user message (the prompt, or the
+    // previous step's tool_results).
+    if (signal?.aborted) return
     let final: Anthropic.Message
     let model: string
     let usage: Anthropic.Usage
@@ -117,6 +133,7 @@ async function runTurn(opts: RunOptions): Promise<void> {
         system,
         tools,
         messages: session.messages,
+        signal,
         onTextDelta: (delta) => {
           textEmitChain = textEmitChain.then(() =>
             Promise.resolve(emit({ type: "text_delta", text: delta })),
@@ -128,6 +145,10 @@ async function runTurn(opts: RunOptions): Promise<void> {
       model = result.model
       usage = result.usage
     } catch (err) {
+      // An abort mid-generation isn't a failure: the partial assistant
+      // message is discarded and nothing was appended, so history still ends
+      // with a user message.
+      if (signal?.aborted) return
       await emit({ type: "error", message: (err as Error).message })
       return
     }
@@ -172,6 +193,20 @@ async function runTurn(opts: RunOptions): Promise<void> {
           type: "tool_result",
           tool_use_id: block.id,
           content: `Unknown tool: ${block.name}`,
+          is_error: true,
+        })
+        continue
+      }
+
+      // A disconnect between the model call and here must not run
+      // side-effecting tools (a canceled quick-edit run would otherwise still
+      // overwrite the worksheet draft via write_sql). Answer the tool_use
+      // with a synthesized error result so the transcript stays valid.
+      if (signal?.aborted) {
+        resultBlocks.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: "Canceled: the user aborted this run before the tool executed.",
           is_error: true,
         })
         continue
@@ -274,6 +309,8 @@ export interface ResumeOptions {
   session: ChatSession
   userAnswer: string
   emit: Emitter
+  /** See RunOptions.signal. */
+  signal?: AbortSignal
 }
 
 /**
@@ -281,7 +318,7 @@ export interface ResumeOptions {
  * with the user's actual answer, then resume the loop.
  */
 export async function resumeWithAnswer(opts: ResumeOptions): Promise<void> {
-  const { session, userAnswer, emit } = opts
+  const { session, userAnswer, emit, signal } = opts
   const pending = session.meta.pending
   if (!pending) {
     await emit({ type: "error", message: "No pending question to resume." })
@@ -304,5 +341,5 @@ export async function resumeWithAnswer(opts: ResumeOptions): Promise<void> {
   // to skip its persist, or if runAgentTurn is invoked first.
   await persistSession(session)
   await clearPending(session)
-  await runAgentTurn({ session, emit })
+  await runAgentTurn({ session, emit, signal })
 }

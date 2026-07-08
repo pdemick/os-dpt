@@ -1,12 +1,191 @@
-import { memo } from "react"
+import { memo, useContext, useState } from "react"
 import type { ReactNode } from "react"
-import { CheckIcon, Loader2Icon, XIcon } from "lucide-react"
+import {
+  CheckIcon,
+  ChevronRightIcon,
+  CopyIcon,
+  FilePlus2Icon,
+  Loader2Icon,
+  XIcon,
+} from "lucide-react"
 import { Streamdown } from "streamdown"
+import { toast } from "sonner"
 
+import { Button } from "@/components/ui/button"
+import { useAgent } from "@/lib/agent/context"
 import type { TranscriptItem } from "@/lib/agent/context"
 import { cn } from "@/lib/utils"
+import { api as worksheetsApi } from "@/lib/worksheets/api"
+import { WorksheetsContext } from "@/lib/worksheets/context-object"
 
 import { ChartView } from "./ChartView"
+
+type ToolItem = Extract<TranscriptItem, { kind: "tool" }>
+
+function statusIcon(status: ToolItem["status"]) {
+  return status === "running" ? (
+    <Loader2Icon className="size-3 animate-spin" />
+  ) : status === "error" ? (
+    <XIcon className="size-3" />
+  ) : (
+    <CheckIcon className="size-3" />
+  )
+}
+
+/**
+ * A run_sql call rendered as an expandable row: the header toggles a SQL
+ * preview with actions to copy the SQL to the clipboard or export it into a
+ * freshly created worksheet.
+ */
+function RunSqlRow({
+  item,
+  sql,
+  queryName,
+}: {
+  item: ToolItem
+  sql: string
+  /** Model-supplied name for the query (the tool input's `name`), when present. */
+  queryName?: string
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const { connectionId: chatConnectionId } = useAgent()
+  // Present only when rendered inside the Worksheets view; the standalone
+  // Chat page has no provider mounted.
+  const worksheets = useContext(WorksheetsContext)
+
+  // The connection this query actually ran against: an explicit input
+  // override, else the chat's bound connection (mirrors run_sql's own
+  // resolution server-side).
+  const inputConnId = (item.input as { connection_id?: unknown } | null)?.connection_id
+  const sourceConnectionId = typeof inputConnId === "string" ? inputConnId : chatConnectionId
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(sql)
+      toast.success("SQL copied to clipboard")
+    } catch {
+      toast.error("Couldn't copy to clipboard")
+    }
+  }
+
+  const copyToWorksheet = async () => {
+    setExporting(true)
+    try {
+      const meta = await worksheetsApi.createWorksheet(queryName)
+      await worksheetsApi.saveWorksheet(meta.slug, sql)
+      let name = meta.name
+      if (queryName) {
+        // The query already has a model-supplied name — reuse it instead of
+        // paying for another LLM naming call.
+        try {
+          name = (await worksheetsApi.renameWorksheet(meta.slug, queryName)).name
+        } catch {
+          // best-effort — the slug-derived name stays in place
+        }
+      } else {
+        try {
+          const named = await worksheetsApi.autoNameWorksheet(meta.slug, sql)
+          if (!named.skipped && named.name) name = named.name
+        } catch {
+          // best-effort — the default name stays in place
+        }
+      }
+      // Bind the new worksheet to the connection the query ran against
+      // (best-effort). Inside the Worksheets view, go through the provider —
+      // it owns the session in memory and its debounced writes would clobber
+      // a direct API write; opening the tab also surfaces the export
+      // immediately. On the standalone Chat page no provider is mounted, so
+      // patch the persisted session directly and the binding hydrates when
+      // the Worksheets view next mounts.
+      try {
+        if (worksheets) {
+          await worksheets.refreshList()
+          await worksheets.openTab(meta.slug)
+          if (sourceConnectionId) {
+            worksheets.setTabConnection(meta.slug, sourceConnectionId, { explicit: true })
+          }
+        } else if (sourceConnectionId) {
+          const session = await worksheetsApi.getSession()
+          await worksheetsApi.putSession({
+            ...session,
+            openTabs: [
+              ...session.openTabs.filter((t) => t.slug !== meta.slug),
+              {
+                slug: meta.slug,
+                cursor: { line: 0, ch: 0 },
+                scrollTop: 0,
+                connectionId: sourceConnectionId,
+                connectionExplicit: true,
+              },
+            ],
+            activeSlug: meta.slug,
+          })
+        }
+      } catch {
+        // best-effort — the worksheet exists either way, just unbound
+      }
+      toast.success(`Created worksheet “${name}”`)
+    } catch (err) {
+      toast.error("Couldn't create worksheet", { description: (err as Error).message })
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border text-xs",
+        item.status === "error"
+          ? "border-destructive/50 bg-destructive/10 text-destructive"
+          : "border-border bg-muted/40 text-muted-foreground",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 px-2 py-1 text-left"
+      >
+        {statusIcon(item.status)}
+        <span className="font-mono">{item.name}</span>
+        {queryName ? (
+          <span className="truncate font-medium text-foreground/80">{queryName}</span>
+        ) : null}
+        {item.summary ? <span className="truncate">— {item.summary}</span> : null}
+        <ChevronRightIcon
+          className={cn("ml-auto size-3 shrink-0 transition-transform", expanded && "rotate-90")}
+        />
+      </button>
+      {expanded ? (
+        <div className="border-t border-border/60 px-2 py-1.5">
+          <pre className="max-h-60 overflow-auto rounded bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
+            {sql}
+          </pre>
+          <div className="mt-1.5 flex items-center gap-1">
+            <Button variant="ghost" size="xs" onClick={() => void copy()}>
+              <CopyIcon data-icon="inline-start" /> Copy
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              disabled={exporting}
+              onClick={() => void copyToWorksheet()}
+            >
+              {exporting ? (
+                <Loader2Icon data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <FilePlus2Icon data-icon="inline-start" />
+              )}{" "}
+              Copy to worksheet
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 export function TranscriptRow({ item }: { item: TranscriptItem }) {
   switch (item.kind) {
@@ -47,7 +226,15 @@ export function TranscriptRow({ item }: { item: TranscriptItem }) {
           </div>
         </div>
       )
-    case "tool":
+    case "tool": {
+      // run_sql calls get an expandable row exposing the SQL; a malformed
+      // input (no sql string) falls through to the generic row.
+      const input =
+        item.name === "run_sql" ? (item.input as { sql?: unknown; name?: unknown } | null) : null
+      if (typeof input?.sql === "string" && input.sql.trim() !== "") {
+        const queryName = typeof input.name === "string" ? input.name.trim() : ""
+        return <RunSqlRow item={item} sql={input.sql} queryName={queryName || undefined} />
+      }
       return (
         <div
           className={cn(
@@ -57,17 +244,12 @@ export function TranscriptRow({ item }: { item: TranscriptItem }) {
               : "border-border bg-muted/40 text-muted-foreground",
           )}
         >
-          {item.status === "running" ? (
-            <Loader2Icon className="size-3 animate-spin" />
-          ) : item.status === "error" ? (
-            <XIcon className="size-3" />
-          ) : (
-            <CheckIcon className="size-3" />
-          )}
+          {statusIcon(item.status)}
           <span className="font-mono">{item.name}</span>
           {item.summary ? <span className="truncate">— {item.summary}</span> : null}
         </div>
       )
+    }
     case "sql_written":
       return (
         <div className="rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs text-muted-foreground">
