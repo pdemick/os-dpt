@@ -74,16 +74,16 @@ export const updateContextTool: AgentTool = {
     }
 
     const target = paths.contextFile(input.file, connectionId)
+    let current = ""
+    try {
+      current = await fs.readFile(target, "utf8")
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err
+    }
     let next: string
     if (input.mode === "replace") {
       next = input.content.endsWith("\n") ? input.content : input.content + "\n"
     } else {
-      let current = ""
-      try {
-        current = await fs.readFile(target, "utf8")
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err
-      }
       const stamp = new Date().toISOString().slice(0, 10)
       const block = `## ${stamp}\n\n${input.content.trim()}\n`
       next = current === "" ? block : current.replace(/\n*$/, "\n\n") + block
@@ -93,6 +93,7 @@ export const updateContextTool: AgentTool = {
       toolResult: `Wrote ${next.length} bytes to context/${input.file}.md (${input.mode})`,
       isError: false,
       uiSummary: `Updated context/${input.file}.md (${input.mode})`,
+      detail: { file: `${input.file}.md`, mode: input.mode, before: current, after: next },
     }
   },
 }

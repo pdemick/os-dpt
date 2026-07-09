@@ -97,7 +97,7 @@ function apply(items: TranscriptItem[], event: AgentEvent): TranscriptItem[] {
     case "tool_result":
       return items.map((it) =>
         it.kind === "tool" && it.toolUseId === event.toolUseId
-          ? { ...it, status: event.ok ? "ok" : "error", summary: event.summary }
+          ? { ...it, status: event.ok ? "ok" : "error", summary: event.summary, detail: event.detail }
           : it,
       )
     case "sql_written":

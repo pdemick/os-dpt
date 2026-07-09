@@ -1,4 +1,4 @@
-import type { AgentToolName, ChartSpec } from "@shared/agent"
+import type { AgentToolName, ChartSpec, ContextUpdateDetail } from "@shared/agent"
 
 export type TranscriptItem =
   | { id: string; kind: "user"; text: string }
@@ -12,6 +12,8 @@ export type TranscriptItem =
       summary: string
       /** The tool_use input block. Lets rows expose call details (e.g. run_sql's SQL). */
       input: unknown
+      /** Structured tool_result payload (update_context's before/after diff). Live-stream only. */
+      detail?: ContextUpdateDetail
     }
   | { id: string; kind: "sql_written"; worksheetSlug: string; length: number }
   | { id: string; kind: "chart"; spec: ChartSpec }

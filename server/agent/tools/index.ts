@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk"
 
-import type { AgentEvent, AgentToolName } from "@shared/agent.ts"
+import type { AgentEvent, AgentToolName, ContextUpdateDetail } from "@shared/agent.ts"
 
 import type { ChatSession } from "../session.ts"
 
@@ -15,6 +15,8 @@ export interface ToolExecution {
   isError: boolean
   /** Short human-readable summary surfaced to the UI in the tool_result SSE event. */
   uiSummary: string
+  /** Structured payload carried on the tool_result SSE event (update_context's before/after diff). */
+  detail?: ContextUpdateDetail
   /** Additional SSE events the loop should emit (e.g. sql_written). */
   events?: AgentEvent[]
   /** If set, the loop pauses, persists `pending`, and closes the SSE stream. */

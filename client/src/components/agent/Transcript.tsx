@@ -12,6 +12,7 @@ import { Streamdown } from "streamdown"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { DiffView } from "@/components/editor/DiffView"
 import { useAgent } from "@/lib/agent/context"
 import type { TranscriptItem } from "@/lib/agent/context"
 import { cn } from "@/lib/utils"
@@ -187,6 +188,61 @@ function RunSqlRow({
   )
 }
 
+/**
+ * An update_context call rendered as an expandable row. Expanded, it shows the
+ * change to the context file as a red/green diff (the same MergeView the
+ * editor's history panel uses), from the before/after snapshot the tool
+ * attaches to its result. Rehydrated chats don't carry that snapshot (like
+ * tool summaries, it's live-stream only), so they fall back to showing the
+ * markdown the agent wrote.
+ */
+function UpdateContextRow({ item }: { item: ToolItem }) {
+  const [expanded, setExpanded] = useState(false)
+  const input = item.input as { file?: unknown; mode?: unknown; content?: unknown } | null
+  const fallbackContent = typeof input?.content === "string" ? input.content : ""
+  const canExpand = item.detail !== undefined || fallbackContent !== ""
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border text-xs",
+        item.status === "error"
+          ? "border-destructive/50 bg-destructive/10 text-destructive"
+          : "border-border bg-muted/40 text-muted-foreground",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => canExpand && setExpanded((e) => !e)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 px-2 py-1 text-left"
+      >
+        {statusIcon(item.status)}
+        <span className="font-mono">{item.name}</span>
+        {item.summary ? <span className="truncate">— {item.summary}</span> : null}
+        {canExpand ? (
+          <ChevronRightIcon
+            className={cn("ml-auto size-3 shrink-0 transition-transform", expanded && "rotate-90")}
+          />
+        ) : null}
+      </button>
+      {expanded ? (
+        <div className="border-t border-border/60 px-2 py-1.5">
+          {item.detail ? (
+            <div className="h-64 overflow-hidden rounded border border-border/60 bg-background">
+              <DiffView past={item.detail.before} current={item.detail.after} />
+            </div>
+          ) : (
+            <pre className="max-h-60 overflow-auto rounded bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
+              {fallbackContent}
+            </pre>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function TranscriptRow({
   item,
   sourceSql,
@@ -243,6 +299,11 @@ export function TranscriptRow({
       if (typeof input?.sql === "string" && input.sql.trim() !== "") {
         const queryName = typeof input.name === "string" ? input.name.trim() : ""
         return <RunSqlRow item={item} sql={input.sql} queryName={queryName || undefined} />
+      }
+      // update_context calls get an expandable row showing the change to the
+      // context file as a diff.
+      if (item.name === "update_context") {
+        return <UpdateContextRow item={item} />
       }
       return (
         <div

@@ -263,6 +263,7 @@ async function runTurn(opts: RunOptions): Promise<void> {
         name: tool.name,
         ok: !execution.isError,
         summary: execution.uiSummary,
+        ...(execution.detail ? { detail: execution.detail } : {}),
       })
 
       resultBlocks.push({

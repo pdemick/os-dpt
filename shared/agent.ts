@@ -115,6 +115,21 @@ export interface PendingAsk {
   askedAt: string
 }
 
+/**
+ * Before/after snapshot of a context file changed by update_context,
+ * surfaced on its tool_result event so the transcript can render the
+ * change as a diff. Live-stream only — like tool summaries, it isn't
+ * persisted with the session messages.
+ */
+export interface ContextUpdateDetail {
+  file: string
+  mode: "append" | "replace"
+  /** Full file content before the write ("" when the file didn't exist). */
+  before: string
+  /** Full file content after the write. */
+  after: string
+}
+
 export type AgentEvent =
   | { type: "text_delta"; text: string }
   | { type: "tool_start"; toolUseId: string; name: AgentToolName; input: unknown }
@@ -124,6 +139,8 @@ export type AgentEvent =
       name: AgentToolName
       ok: boolean
       summary: string
+      /** Structured payload for rows that show more than a summary (update_context's diff). */
+      detail?: ContextUpdateDetail
     }
   | { type: "sql_written"; worksheetSlug: string; sql: string }
   | { type: "chart_rendered"; spec: ChartSpec }
