@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback } from "react"
 import { MessageSquarePlusIcon, MessageSquareText, Trash2 } from "lucide-react"
 
 import type { ChatSessionMeta } from "@shared/agent"
@@ -7,6 +7,7 @@ import { Composer } from "@/components/agent/Composer"
 import { Transcript } from "@/components/agent/Transcript"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useStickToBottom } from "@/hooks/use-stick-to-bottom"
 import { AgentChatProvider, useAgent } from "@/lib/agent/context"
 import { useAppIntent } from "@/lib/app-intents"
 import { cn } from "@/lib/utils"
@@ -127,18 +128,12 @@ function ChatRow({
 }
 
 function Conversation() {
-  const { items, streaming, pendingQuestion, send, answer } = useAgent()
-  const scrollRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [items])
+  const { session, items, streaming, pendingQuestion, send, answer } = useAgent()
+  const { ref: scrollRef, onScroll } = useStickToBottom<HTMLDivElement>(items, session?.id ?? null)
 
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-background">
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-6 py-6">
           <Transcript
             items={items}

@@ -1,23 +1,27 @@
-import { useEffect, useRef } from "react"
 import { MessageSquarePlusIcon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { useStickToBottom } from "@/hooks/use-stick-to-bottom"
 import { useAgent } from "@/lib/agent/context"
 
 import { Composer } from "./Composer"
 import { Transcript } from "./Transcript"
 
 export function ChatPanel() {
-  const { isOpen, close, newChat, items, streaming, pendingQuestion, send, answer, exploreOnly } =
-    useAgent()
+  const {
+    isOpen,
+    close,
+    newChat,
+    session,
+    items,
+    streaming,
+    pendingQuestion,
+    send,
+    answer,
+    exploreOnly,
+  } = useAgent()
 
-  const scrollRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [items])
+  const { ref: scrollRef, onScroll } = useStickToBottom<HTMLDivElement>(items, session?.id ?? null)
 
   if (!isOpen) return null
 
@@ -47,7 +51,7 @@ export function ChatPanel() {
         </div>
       )}
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         <Transcript
           items={items}
           streaming={streaming}

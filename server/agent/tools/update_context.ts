@@ -1,5 +1,7 @@
 import { promises as fs } from "node:fs"
 
+import type { ContextUpdateDetail } from "@shared/agent.ts"
+
 import { writeAtomic } from "../../lib/fs-atomic.ts"
 import { CONTEXT_FILES, type ContextFile, isSafeConnectionId, paths } from "../../workspace.ts"
 
@@ -13,6 +15,54 @@ interface Input {
 
 function isContextFile(v: string): v is ContextFile {
   return (CONTEXT_FILES as readonly string[]).includes(v)
+}
+
+/** Unchanged lines kept around the change in the detail payload. */
+const DETAIL_CONTEXT_LINES = 8
+
+function toLines(text: string): string[] {
+  return text === "" ? [] : text.replace(/\n$/, "").split("\n")
+}
+
+/**
+ * The before/after snapshots the UI diffs. Context files grow without bound
+ * (append mode date-stamps blocks forever), so sending both in full would make
+ * every update_context event scale with the file's lifetime. Trim the shared
+ * prefix/suffix down to a few context lines and report the trimmed counts so
+ * the UI can render hidden-line markers; the diff itself is unaffected — the
+ * client trims common prefix/suffix before diffing anyway.
+ */
+function detailSnapshots(
+  before: string,
+  after: string,
+): Pick<ContextUpdateDetail, "before" | "after" | "trimmed"> {
+  const a = toLines(before)
+  const b = toLines(after)
+  let prefix = 0
+  while (prefix < a.length && prefix < b.length && a[prefix] === b[prefix]) prefix++
+  let suffix = 0
+  while (
+    suffix < a.length - prefix &&
+    suffix < b.length - prefix &&
+    a[a.length - 1 - suffix] === b[b.length - 1 - suffix]
+  ) {
+    suffix++
+  }
+  const leading = Math.max(0, prefix - DETAIL_CONTEXT_LINES)
+  const trailing = Math.max(0, suffix - DETAIL_CONTEXT_LINES)
+  if (leading === 0 && trailing === 0) return { before, after }
+  // If the trimmed-away prefix ends inside an open code fence, the client
+  // can't tell once the opening ``` is gone — flag it so in-fence chunks
+  // render as plain text instead of markdown.
+  let fences = 0
+  for (let i = 0; i < leading; i++) {
+    if (/^\s{0,3}(```|~~~)/.test(a[i])) fences++
+  }
+  return {
+    before: a.slice(leading, a.length - trailing).join("\n"),
+    after: b.slice(leading, b.length - trailing).join("\n"),
+    trimmed: { leading, trailing, ...(fences % 2 === 1 ? { inFence: true } : {}) },
+  }
 }
 
 export const updateContextTool: AgentTool = {
@@ -74,16 +124,16 @@ export const updateContextTool: AgentTool = {
     }
 
     const target = paths.contextFile(input.file, connectionId)
+    let current = ""
+    try {
+      current = await fs.readFile(target, "utf8")
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err
+    }
     let next: string
     if (input.mode === "replace") {
       next = input.content.endsWith("\n") ? input.content : input.content + "\n"
     } else {
-      let current = ""
-      try {
-        current = await fs.readFile(target, "utf8")
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err
-      }
       const stamp = new Date().toISOString().slice(0, 10)
       const block = `## ${stamp}\n\n${input.content.trim()}\n`
       next = current === "" ? block : current.replace(/\n*$/, "\n\n") + block
@@ -93,6 +143,7 @@ export const updateContextTool: AgentTool = {
       toolResult: `Wrote ${next.length} bytes to context/${input.file}.md (${input.mode})`,
       isError: false,
       uiSummary: `Updated context/${input.file}.md (${input.mode})`,
+      detail: { file: `${input.file}.md`, mode: input.mode, ...detailSnapshots(current, next) },
     }
   },
 }

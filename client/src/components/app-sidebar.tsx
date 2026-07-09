@@ -48,7 +48,7 @@ export function AppSidebar({
             <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
               <DatabaseIcon className="size-4" />
             </div>
-            <span className="truncate text-sm font-semibold">dpt</span>
+            <span className="truncate text-sm font-semibold">Data Profile Tool</span>
           </div>
           <SidebarTrigger className="text-sidebar-foreground/60 group-data-[collapsible=icon]:mx-auto" />
         </div>

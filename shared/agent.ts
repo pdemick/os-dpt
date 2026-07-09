@@ -8,7 +8,7 @@ export type AgentToolName =
   | "render_chart"
 
 /** Chart kinds the agent can render into the chat. */
-export type ChartType = "bar" | "line" | "area" | "pie"
+export type ChartType = "bar" | "stacked-bar" | "line" | "area" | "pie" | "funnel"
 
 /** One numeric series plotted from a column of the supplied data. */
 export interface ChartSeries {
@@ -27,12 +27,18 @@ export interface ChartSpec {
   type: ChartType
   /** Optional title shown above the chart. */
   title?: string
-  /** Row key for the category axis (x-axis for bar/line/area; slice label for pie). */
+  /** Row key for the category axis (x-axis for bar/line/area; slice label for pie; stage label for funnel). */
   x: string
-  /** Series to plot. For pie, only the first series is used (slice value). */
+  /** Series to plot. For pie and funnel, only the first series is used (slice/stage value). */
   series: ChartSeries[]
   /** Row objects to chart, e.g. `[{ month: "Jan", revenue: 120 }, …]`. */
   data: Record<string, unknown>[]
+  /**
+   * `name` of the run_sql call whose results this chart plots. Links the
+   * chart back to its source query in the UI; without it the client falls
+   * back to the closest preceding run_sql in the transcript.
+   */
+  sourceQuery?: string
 }
 
 /**
@@ -115,6 +121,34 @@ export interface PendingAsk {
   askedAt: string
 }
 
+/**
+ * Before/after snapshot of a context file changed by update_context,
+ * surfaced on its tool_result event so the transcript can render the
+ * change as a diff. Live-stream only — like tool summaries, it isn't
+ * persisted with the session messages.
+ */
+export interface ContextUpdateDetail {
+  file: string
+  mode: "append" | "replace"
+  /**
+   * File content before the write ("" when the file didn't exist). Long
+   * unchanged prefix/suffix runs are trimmed server-side (see `trimmed`) so
+   * the payload stays proportional to the change, not the file — context
+   * files grow without bound.
+   */
+  before: string
+  /** File content after the write, trimmed the same way as `before`. */
+  after: string
+  /**
+   * Unchanged lines trimmed from the start/end of both snapshots, when the
+   * shared prefix/suffix exceeded the context kept around the change. The UI
+   * shows these as hidden-line markers. `inFence` marks the trimmed prefix
+   * ending inside an open code fence, so the UI knows the snapshots start
+   * mid-fence even though the opening ``` was trimmed away.
+   */
+  trimmed?: { leading: number; trailing: number; inFence?: boolean }
+}
+
 export type AgentEvent =
   | { type: "text_delta"; text: string }
   | { type: "tool_start"; toolUseId: string; name: AgentToolName; input: unknown }
@@ -124,6 +158,8 @@ export type AgentEvent =
       name: AgentToolName
       ok: boolean
       summary: string
+      /** Structured payload for rows that show more than a summary (update_context's diff). */
+      detail?: ContextUpdateDetail
     }
   | { type: "sql_written"; worksheetSlug: string; sql: string }
   | { type: "chart_rendered"; spec: ChartSpec }

@@ -1,4 +1,4 @@
-import { memo, useContext, useState } from "react"
+import { memo, useContext, useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import {
   CheckIcon,
@@ -12,6 +12,7 @@ import { Streamdown } from "streamdown"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { SqlPreview } from "@/components/editor/SqlPreview"
 import { useAgent } from "@/lib/agent/context"
 import type { TranscriptItem } from "@/lib/agent/context"
 import { cn } from "@/lib/utils"
@@ -19,6 +20,7 @@ import { api as worksheetsApi } from "@/lib/worksheets/api"
 import { WorksheetsContext } from "@/lib/worksheets/context-object"
 
 import { ChartView } from "./ChartView"
+import { MarkdownDiff, MarkdownProse } from "./MarkdownDiff"
 
 type ToolItem = Extract<TranscriptItem, { kind: "tool" }>
 
@@ -160,9 +162,7 @@ function RunSqlRow({
       </button>
       {expanded ? (
         <div className="border-t border-border/60 px-2 py-1.5">
-          <pre className="max-h-60 overflow-auto rounded bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
-            {sql}
-          </pre>
+          <SqlPreview value={sql} />
           <div className="mt-1.5 flex items-center gap-1">
             <Button variant="ghost" size="xs" onClick={() => void copy()}>
               <CopyIcon data-icon="inline-start" /> Copy
@@ -187,7 +187,73 @@ function RunSqlRow({
   )
 }
 
-export function TranscriptRow({ item }: { item: TranscriptItem }) {
+/**
+ * An update_context call rendered as an expandable row. Expanded, it shows the
+ * change to the context file as a git-style red/green diff of rendered
+ * markdown, from the before/after snapshot the tool attaches to its result.
+ * Rehydrated chats don't carry that snapshot (like tool summaries, it's
+ * live-stream only), so they fall back to rendering the markdown the agent
+ * wrote.
+ */
+function UpdateContextRow({ item }: { item: ToolItem }) {
+  const [expanded, setExpanded] = useState(false)
+  const input = item.input as { file?: unknown; mode?: unknown; content?: unknown } | null
+  const fallbackContent = typeof input?.content === "string" ? input.content : ""
+  const canExpand = item.detail !== undefined || fallbackContent !== ""
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border text-xs",
+        item.status === "error"
+          ? "border-destructive/50 bg-destructive/10 text-destructive"
+          : "border-border bg-muted/40 text-muted-foreground",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => canExpand && setExpanded((e) => !e)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 px-2 py-1 text-left"
+      >
+        {statusIcon(item.status)}
+        <span className="font-mono">{item.name}</span>
+        {item.summary ? <span className="truncate">— {item.summary}</span> : null}
+        {canExpand ? (
+          <ChevronRightIcon
+            className={cn("ml-auto size-3 shrink-0 transition-transform", expanded && "rotate-90")}
+          />
+        ) : null}
+      </button>
+      {expanded ? (
+        <div className="border-t border-border/60 px-2 py-1.5">
+          <div className="max-h-80 overflow-auto rounded bg-background/60 p-1.5 text-foreground">
+            {item.detail ? (
+              <MarkdownDiff
+                before={item.detail.before}
+                after={item.detail.after}
+                trimmed={item.detail.trimmed}
+              />
+            ) : (
+              <MarkdownProse>{fallbackContent}</MarkdownProse>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+export function TranscriptRow({
+  item,
+  sourceSql,
+  sourceQueryName,
+}: {
+  item: TranscriptItem
+  /** For chart items: the SQL of the run_sql call that produced the data. */
+  sourceSql?: string
+  sourceQueryName?: string
+}) {
   switch (item.kind) {
     case "user":
       return (
@@ -235,6 +301,11 @@ export function TranscriptRow({ item }: { item: TranscriptItem }) {
         const queryName = typeof input.name === "string" ? input.name.trim() : ""
         return <RunSqlRow item={item} sql={input.sql} queryName={queryName || undefined} />
       }
+      // update_context calls get an expandable row showing the change to the
+      // context file as a diff.
+      if (item.name === "update_context") {
+        return <UpdateContextRow item={item} />
+      }
       return (
         <div
           className={cn(
@@ -258,7 +329,7 @@ export function TranscriptRow({ item }: { item: TranscriptItem }) {
         </div>
       )
     case "chart":
-      return <ChartView spec={item.spec} />
+      return <ChartView spec={item.spec} sourceSql={sourceSql} sourceQueryName={sourceQueryName} />
     case "ask_user":
       return (
         <div className="rounded-md border border-amber-400/40 bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
@@ -274,7 +345,42 @@ export function TranscriptRow({ item }: { item: TranscriptItem }) {
   }
 }
 
-const MemoTranscriptRow = memo(TranscriptRow, (prev, next) => prev.item === next.item)
+const MemoTranscriptRow = memo(
+  TranscriptRow,
+  (prev, next) =>
+    prev.item === next.item &&
+    prev.sourceSql === next.sourceSql &&
+    prev.sourceQueryName === next.sourceQueryName,
+)
+
+/**
+ * The run_sql call each chart's data came from, keyed by chart item id. A
+ * spec's `sourceQuery` (the run_sql `name` the agent cited) is authoritative:
+ * it matches the latest preceding run_sql with that name. Charts without one
+ * fall back to the closest preceding run_sql — a heuristic that can
+ * mis-attribute when the agent runs several queries before charting an
+ * earlier one's results (for live streams and rehydrated chats alike).
+ */
+function chartSources(items: TranscriptItem[]): Map<string, { sql: string; name?: string }> {
+  const map = new Map<string, { sql: string; name?: string }>()
+  const byName = new Map<string, { sql: string; name?: string }>()
+  let last: { sql: string; name?: string } | null = null
+  for (const it of items) {
+    if (it.kind === "tool" && it.name === "run_sql") {
+      const input = it.input as { sql?: unknown; name?: unknown } | null
+      if (typeof input?.sql === "string" && input.sql.trim() !== "") {
+        const name = typeof input.name === "string" ? input.name.trim() : ""
+        last = { sql: input.sql, name: name || undefined }
+        if (name) byName.set(name, last)
+      }
+    } else if (it.kind === "chart") {
+      const cited = it.spec.sourceQuery?.trim()
+      const source = (cited ? byName.get(cited) : undefined) ?? last
+      if (source) map.set(it.id, source)
+    }
+  }
+  return map
+}
 
 /**
  * Renders a conversation: the transcript rows, a streaming indicator while the
@@ -291,13 +397,19 @@ export function Transcript({
   pendingQuestion: string | null
   emptyState: ReactNode
 }) {
+  const sources = useMemo(() => chartSources(items), [items])
   if (items.length === 0 && !streaming) {
     return <div className="text-xs text-muted-foreground">{emptyState}</div>
   }
   return (
     <div className="flex flex-col gap-3">
       {items.map((it) => (
-        <MemoTranscriptRow key={it.id} item={it} />
+        <MemoTranscriptRow
+          key={it.id}
+          item={it}
+          sourceSql={sources.get(it.id)?.sql}
+          sourceQueryName={sources.get(it.id)?.name}
+        />
       ))}
       {streaming && !pendingQuestion ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
