@@ -12,6 +12,7 @@ import { Streamdown } from "streamdown"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { SqlPreview } from "@/components/editor/SqlPreview"
 import { useAgent } from "@/lib/agent/context"
 import type { TranscriptItem } from "@/lib/agent/context"
 import { cn } from "@/lib/utils"
@@ -161,9 +162,7 @@ function RunSqlRow({
       </button>
       {expanded ? (
         <div className="border-t border-border/60 px-2 py-1.5">
-          <pre className="max-h-60 overflow-auto rounded bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
-            {sql}
-          </pre>
+          <SqlPreview value={sql} />
           <div className="mt-1.5 flex items-center gap-1">
             <Button variant="ghost" size="xs" onClick={() => void copy()}>
               <CopyIcon data-icon="inline-start" /> Copy

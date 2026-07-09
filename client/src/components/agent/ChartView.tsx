@@ -22,6 +22,7 @@ import { toast } from "sonner"
 import type { ChartSeries, ChartSpec } from "@shared/agent"
 
 import { Button } from "@/components/ui/button"
+import { SqlPreview } from "@/components/editor/SqlPreview"
 import { cn } from "@/lib/utils"
 
 const PALETTE = [
@@ -179,9 +180,7 @@ function SourceQuery({ sql, queryName }: { sql: string; queryName?: string }) {
       </button>
       {expanded ? (
         <div className="px-1 pb-0.5">
-          <pre className="max-h-60 overflow-auto rounded bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
-            {sql}
-          </pre>
+          <SqlPreview value={sql} />
           <div className="mt-1">
             <Button variant="ghost" size="xs" onClick={() => void copy()}>
               <CopyIcon data-icon="inline-start" /> Copy
