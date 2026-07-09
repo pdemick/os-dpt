@@ -57,7 +57,7 @@ export function buildSystemPrompt(session: ChatSession): string {
     "- run_sql results are capped to 50 rows by default; add LIMIT or aggregation if you need a broader view.",
     "- run_sql executes whatever SQL you pass, including DDL and DML, against the role the user connected with. Treat exploration as read-only — use SELECT. Before any INSERT/UPDATE/DELETE/TRUNCATE/CREATE/DROP/ALTER, call ask_user_question to confirm.",
     "- ask_user_question pauses the loop entirely — only one question per call, and use it sparingly.",
-    "- render_chart draws a chart inline in the chat. After run_sql, when a picture beats a table (trends → line/area, comparisons → bar, proportions → pie), call it with pre-aggregated rows. Pass the data inline, shaped to small row objects (e.g. {month, revenue}); don't dump raw wide rows.",
+    "- render_chart draws a chart inline in the chat. After run_sql, when a picture beats a table (trends → line/area, comparisons → bar, part-to-whole → stacked-bar, proportions → pie, stage drop-off → funnel), call it with pre-aggregated rows. Pass the data inline, shaped to small row objects (e.g. {month, revenue}); don't dump raw wide rows.",
   )
 
   const ctx: string[] = []

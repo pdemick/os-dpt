@@ -7,6 +7,9 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Funnel,
+  FunnelChart,
+  LabelList,
   Legend,
   Line,
   LineChart,
@@ -325,8 +328,31 @@ function renderChart(
         </PieChart>
       )
     }
+    case "funnel": {
+      const valueKey = series[0].key
+      return (
+        <FunnelChart margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+          <Tooltip {...tooltipStyle} />
+          <Funnel data={data} dataKey={valueKey} nameKey={x} isAnimationActive={false}>
+            {data.map((_, i) => (
+              <Cell key={i} fill={color(i)} />
+            ))}
+            <LabelList
+              dataKey={x}
+              position="right"
+              stroke="none"
+              fill="var(--foreground)"
+              fontSize={10}
+            />
+          </Funnel>
+        </FunnelChart>
+      )
+    }
     case "bar":
-    default:
+    case "stacked-bar":
+    default: {
+      // All series share one stack id for stacked-bar; undefined = grouped.
+      const stackId = type === "stacked-bar" ? "stack" : undefined
       return (
         <BarChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -335,9 +361,19 @@ function renderChart(
           <Tooltip {...tooltipStyle} cursor={{ fill: "var(--muted)", opacity: 0.4 }} />
           {legend}
           {series.map((s, i) => (
-            <Bar key={s.key} dataKey={s.key} name={s.label} fill={color(i)} radius={[2, 2, 0, 0]} />
+            <Bar
+              key={s.key}
+              dataKey={s.key}
+              name={s.label}
+              stackId={stackId}
+              fill={color(i)}
+              // Rounded tops read wrong mid-stack; only the last (topmost)
+              // stacked series keeps them.
+              radius={stackId && i < series.length - 1 ? undefined : [2, 2, 0, 0]}
+            />
           ))}
         </BarChart>
       )
+    }
   }
 }

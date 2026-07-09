@@ -8,7 +8,7 @@ export type AgentToolName =
   | "render_chart"
 
 /** Chart kinds the agent can render into the chat. */
-export type ChartType = "bar" | "line" | "area" | "pie"
+export type ChartType = "bar" | "stacked-bar" | "line" | "area" | "pie" | "funnel"
 
 /** One numeric series plotted from a column of the supplied data. */
 export interface ChartSeries {
@@ -27,9 +27,9 @@ export interface ChartSpec {
   type: ChartType
   /** Optional title shown above the chart. */
   title?: string
-  /** Row key for the category axis (x-axis for bar/line/area; slice label for pie). */
+  /** Row key for the category axis (x-axis for bar/line/area; slice label for pie; stage label for funnel). */
   x: string
-  /** Series to plot. For pie, only the first series is used (slice value). */
+  /** Series to plot. For pie and funnel, only the first series is used (slice/stage value). */
   series: ChartSeries[]
   /** Row objects to chart, e.g. `[{ month: "Jan", revenue: 120 }, …]`. */
   data: Record<string, unknown>[]

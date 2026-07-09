@@ -10,7 +10,7 @@ interface Input {
   data?: unknown
 }
 
-const CHART_TYPES: ChartType[] = ["bar", "line", "area", "pie"]
+const CHART_TYPES: ChartType[] = ["bar", "stacked-bar", "line", "area", "pie", "funnel"]
 const MAX_ROWS = 500
 const MAX_SERIES = 8
 
@@ -58,11 +58,13 @@ export const renderChartTool: AgentTool = {
     "Render a chart inline in the chat to visualize query results. Supply the data rows directly " +
     "(shaped from your run_sql results) along with the chart spec — the chart is self-contained. " +
     "Use this after run_sql when a visualization communicates the answer better than a table: trends " +
-    "over time (line/area), category comparisons (bar), or proportions (pie). Keep data small and " +
+    "over time (line/area), category comparisons (bar), part-to-whole across categories (stacked-bar), " +
+    "proportions (pie), or stage-by-stage drop-off like a conversion pipeline (funnel). Keep data small and " +
     "pre-aggregated (cap " +
     `${MAX_ROWS} rows). Each data row is an object keyed by column name, e.g. ` +
     '`[{ "month": "Jan", "revenue": 120 }, …]`. `x` names the category column; `series` names the ' +
-    "numeric column(s) to plot. For pie charts only the first series is used.",
+    "numeric column(s) to plot. For pie and funnel charts only the first series is used; for funnel, " +
+    "order rows from the widest stage to the narrowest.",
   input_schema: {
     type: "object",
     required: ["type", "x", "series", "data"],
@@ -70,7 +72,7 @@ export const renderChartTool: AgentTool = {
       type: {
         type: "string",
         enum: CHART_TYPES,
-        description: "Chart kind: bar, line, area, or pie.",
+        description: "Chart kind: bar, stacked-bar, line, area, pie, or funnel.",
       },
       title: { type: "string", description: "Optional title shown above the chart." },
       x: {
