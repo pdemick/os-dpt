@@ -124,10 +124,21 @@ export interface PendingAsk {
 export interface ContextUpdateDetail {
   file: string
   mode: "append" | "replace"
-  /** Full file content before the write ("" when the file didn't exist). */
+  /**
+   * File content before the write ("" when the file didn't exist). Long
+   * unchanged prefix/suffix runs are trimmed server-side (see `trimmed`) so
+   * the payload stays proportional to the change, not the file — context
+   * files grow without bound.
+   */
   before: string
-  /** Full file content after the write. */
+  /** File content after the write, trimmed the same way as `before`. */
   after: string
+  /**
+   * Unchanged lines trimmed from the start/end of both snapshots, when the
+   * shared prefix/suffix exceeded the context kept around the change. The UI
+   * shows these as hidden-line markers.
+   */
+  trimmed?: { leading: number; trailing: number }
 }
 
 export type AgentEvent =

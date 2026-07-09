@@ -1,5 +1,7 @@
 import { promises as fs } from "node:fs"
 
+import type { ContextUpdateDetail } from "@shared/agent.ts"
+
 import { writeAtomic } from "../../lib/fs-atomic.ts"
 import { CONTEXT_FILES, type ContextFile, isSafeConnectionId, paths } from "../../workspace.ts"
 
@@ -13,6 +15,47 @@ interface Input {
 
 function isContextFile(v: string): v is ContextFile {
   return (CONTEXT_FILES as readonly string[]).includes(v)
+}
+
+/** Unchanged lines kept around the change in the detail payload. */
+const DETAIL_CONTEXT_LINES = 8
+
+function toLines(text: string): string[] {
+  return text === "" ? [] : text.replace(/\n$/, "").split("\n")
+}
+
+/**
+ * The before/after snapshots the UI diffs. Context files grow without bound
+ * (append mode date-stamps blocks forever), so sending both in full would make
+ * every update_context event scale with the file's lifetime. Trim the shared
+ * prefix/suffix down to a few context lines and report the trimmed counts so
+ * the UI can render hidden-line markers; the diff itself is unaffected — the
+ * client trims common prefix/suffix before diffing anyway.
+ */
+function detailSnapshots(
+  before: string,
+  after: string,
+): Pick<ContextUpdateDetail, "before" | "after" | "trimmed"> {
+  const a = toLines(before)
+  const b = toLines(after)
+  let prefix = 0
+  while (prefix < a.length && prefix < b.length && a[prefix] === b[prefix]) prefix++
+  let suffix = 0
+  while (
+    suffix < a.length - prefix &&
+    suffix < b.length - prefix &&
+    a[a.length - 1 - suffix] === b[b.length - 1 - suffix]
+  ) {
+    suffix++
+  }
+  const leading = Math.max(0, prefix - DETAIL_CONTEXT_LINES)
+  const trailing = Math.max(0, suffix - DETAIL_CONTEXT_LINES)
+  if (leading === 0 && trailing === 0) return { before, after }
+  return {
+    before: a.slice(leading, a.length - trailing).join("\n"),
+    after: b.slice(leading, b.length - trailing).join("\n"),
+    trimmed: { leading, trailing },
+  }
 }
 
 export const updateContextTool: AgentTool = {
@@ -93,7 +136,7 @@ export const updateContextTool: AgentTool = {
       toolResult: `Wrote ${next.length} bytes to context/${input.file}.md (${input.mode})`,
       isError: false,
       uiSummary: `Updated context/${input.file}.md (${input.mode})`,
-      detail: { file: `${input.file}.md`, mode: input.mode, before: current, after: next },
+      detail: { file: `${input.file}.md`, mode: input.mode, ...detailSnapshots(current, next) },
     }
   },
 }

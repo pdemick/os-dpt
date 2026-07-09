@@ -120,6 +120,14 @@ function diffLines(a: string[], b: string[]): Chunk[] {
 const SAME_CHUNK_MAX_LINES = 8
 const SAME_CHUNK_CONTEXT_LINES = 3
 
+function HiddenLines({ count }: { count: number }) {
+  return (
+    <div className="py-0.5 text-center text-[10px] text-muted-foreground">
+      ⋯ {count} unchanged lines ⋯
+    </div>
+  )
+}
+
 function SameChunk({ lines }: { lines: string[] }) {
   if (lines.length > SAME_CHUNK_MAX_LINES) {
     return (
@@ -127,9 +135,7 @@ function SameChunk({ lines }: { lines: string[] }) {
         <MarkdownProse className="opacity-60">
           {lines.slice(0, SAME_CHUNK_CONTEXT_LINES).join("\n")}
         </MarkdownProse>
-        <div className="py-0.5 text-center text-[10px] text-muted-foreground">
-          ⋯ {lines.length - SAME_CHUNK_CONTEXT_LINES * 2} unchanged lines ⋯
-        </div>
+        <HiddenLines count={lines.length - SAME_CHUNK_CONTEXT_LINES * 2} />
         <MarkdownProse className="opacity-60">
           {lines.slice(-SAME_CHUNK_CONTEXT_LINES).join("\n")}
         </MarkdownProse>
@@ -143,12 +149,22 @@ function SameChunk({ lines }: { lines: string[] }) {
  * A context-file change rendered as a git-style diff of *formatted* markdown:
  * removed/added chunks get red/green tinting, unchanged context renders dimmed
  * (long runs collapsed), and everything is rendered markdown rather than raw
- * `###` source.
+ * `###` source. `trimmed` reports unchanged lines the server already dropped
+ * from both snapshots; they render as the same hidden-line markers.
  */
-export function MarkdownDiff({ before, after }: { before: string; after: string }) {
+export function MarkdownDiff({
+  before,
+  after,
+  trimmed,
+}: {
+  before: string
+  after: string
+  trimmed?: { leading: number; trailing: number }
+}) {
   const chunks = useMemo(() => diffLines(toLines(before), toLines(after)), [before, after])
   return (
     <div className="flex flex-col gap-1">
+      {trimmed && trimmed.leading > 0 ? <HiddenLines count={trimmed.leading} /> : null}
       {chunks.map((chunk, i) =>
         chunk.kind === "same" ? (
           <SameChunk key={i} lines={chunk.lines} />
@@ -166,6 +182,7 @@ export function MarkdownDiff({ before, after }: { before: string; after: string 
           </div>
         ),
       )}
+      {trimmed && trimmed.trailing > 0 ? <HiddenLines count={trimmed.trailing} /> : null}
     </div>
   )
 }

@@ -229,7 +229,11 @@ function UpdateContextRow({ item }: { item: ToolItem }) {
         <div className="border-t border-border/60 px-2 py-1.5">
           <div className="max-h-80 overflow-auto rounded bg-background/60 p-1.5 text-foreground">
             {item.detail ? (
-              <MarkdownDiff before={item.detail.before} after={item.detail.after} />
+              <MarkdownDiff
+                before={item.detail.before}
+                after={item.detail.after}
+                trimmed={item.detail.trimmed}
+              />
             ) : (
               <MarkdownProse>{fallbackContent}</MarkdownProse>
             )}
