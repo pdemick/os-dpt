@@ -8,6 +8,7 @@ interface Input {
   x?: string
   series?: unknown
   data?: unknown
+  sourceQuery?: string
 }
 
 const CHART_TYPES: ChartType[] = ["bar", "stacked-bar", "line", "area", "pie", "funnel"]
@@ -64,7 +65,8 @@ export const renderChartTool: AgentTool = {
     `${MAX_ROWS} rows). Each data row is an object keyed by column name, e.g. ` +
     '`[{ "month": "Jan", "revenue": 120 }, …]`. `x` names the category column; `series` names the ' +
     "numeric column(s) to plot. For pie and funnel charts only the first series is used; for funnel, " +
-    "order rows from the widest stage to the narrowest.",
+    "order rows from the widest stage to the narrowest. Pass `sourceQuery` — the `name` you gave the " +
+    "run_sql call the data came from — so the chart links back to its query.",
   input_schema: {
     type: "object",
     required: ["type", "x", "series", "data"],
@@ -97,6 +99,12 @@ export const renderChartTool: AgentTool = {
         type: "array",
         description: "Row objects to chart, keyed by column name.",
         items: { type: "object" },
+      },
+      sourceQuery: {
+        type: "string",
+        description:
+          "The `name` of the run_sql call whose results this chart plots. Lets the UI link the " +
+          "chart back to its source query.",
       },
     },
   },
@@ -133,6 +141,9 @@ export const renderChartTool: AgentTool = {
       data,
       ...(typeof input.title === "string" && input.title.trim() !== ""
         ? { title: input.title }
+        : {}),
+      ...(typeof input.sourceQuery === "string" && input.sourceQuery.trim() !== ""
+        ? { sourceQuery: input.sourceQuery.trim() }
         : {}),
     }
 

@@ -354,13 +354,16 @@ const MemoTranscriptRow = memo(
 )
 
 /**
- * The run_sql call each chart's data came from, keyed by chart item id: the
- * closest run_sql preceding the chart in the transcript. The spec itself
- * carries only shaped data rows, so this is how a chart links back to its
- * source query (for live streams and rehydrated chats alike).
+ * The run_sql call each chart's data came from, keyed by chart item id. A
+ * spec's `sourceQuery` (the run_sql `name` the agent cited) is authoritative:
+ * it matches the latest preceding run_sql with that name. Charts without one
+ * fall back to the closest preceding run_sql — a heuristic that can
+ * mis-attribute when the agent runs several queries before charting an
+ * earlier one's results (for live streams and rehydrated chats alike).
  */
 function chartSources(items: TranscriptItem[]): Map<string, { sql: string; name?: string }> {
   const map = new Map<string, { sql: string; name?: string }>()
+  const byName = new Map<string, { sql: string; name?: string }>()
   let last: { sql: string; name?: string } | null = null
   for (const it of items) {
     if (it.kind === "tool" && it.name === "run_sql") {
@@ -368,9 +371,12 @@ function chartSources(items: TranscriptItem[]): Map<string, { sql: string; name?
       if (typeof input?.sql === "string" && input.sql.trim() !== "") {
         const name = typeof input.name === "string" ? input.name.trim() : ""
         last = { sql: input.sql, name: name || undefined }
+        if (name) byName.set(name, last)
       }
-    } else if (it.kind === "chart" && last) {
-      map.set(it.id, last)
+    } else if (it.kind === "chart") {
+      const cited = it.spec.sourceQuery?.trim()
+      const source = (cited ? byName.get(cited) : undefined) ?? last
+      if (source) map.set(it.id, source)
     }
   }
   return map

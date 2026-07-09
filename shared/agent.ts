@@ -33,6 +33,12 @@ export interface ChartSpec {
   series: ChartSeries[]
   /** Row objects to chart, e.g. `[{ month: "Jan", revenue: 120 }, …]`. */
   data: Record<string, unknown>[]
+  /**
+   * `name` of the run_sql call whose results this chart plots. Links the
+   * chart back to its source query in the UI; without it the client falls
+   * back to the closest preceding run_sql in the transcript.
+   */
+  sourceQuery?: string
 }
 
 /**
