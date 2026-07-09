@@ -1,5 +1,5 @@
-import { useMemo, useRef } from "react"
-import { ImageDownIcon } from "lucide-react"
+import { useMemo, useRef, useState } from "react"
+import { ChevronRightIcon, CodeIcon, CopyIcon, ImageDownIcon } from "lucide-react"
 import {
   Area,
   AreaChart,
@@ -22,6 +22,7 @@ import { toast } from "sonner"
 import type { ChartSeries, ChartSpec } from "@shared/agent"
 
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 const PALETTE = [
   "var(--chart-1)",
@@ -68,7 +69,16 @@ const tooltipStyle = {
   labelStyle: { color: "var(--popover-foreground)" },
 } as const
 
-export function ChartView({ spec }: { spec: ChartSpec }) {
+export function ChartView({
+  spec,
+  sourceSql,
+  sourceQueryName,
+}: {
+  spec: ChartSpec
+  /** SQL of the run_sql call that produced this chart's data, when known. */
+  sourceSql?: string
+  sourceQueryName?: string
+}) {
   const figureRef = useRef<HTMLElement>(null)
   const series = useMemo(() => normalizeSeries(spec.series), [spec.series])
 
@@ -129,7 +139,57 @@ export function ChartView({ spec }: { spec: ChartSpec }) {
           {renderChart(spec.type, spec.x, series, data)}
         </ResponsiveContainer>
       </div>
+      {sourceSql ? <SourceQuery sql={sourceSql} queryName={sourceQueryName} /> : null}
     </figure>
+  )
+}
+
+/**
+ * Collapsed-by-default footer linking a chart back to the SQL that produced
+ * its data (the closest preceding run_sql call in the transcript).
+ */
+function SourceQuery({ sql, queryName }: { sql: string; queryName?: string }) {
+  const [expanded, setExpanded] = useState(false)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(sql)
+      toast.success("SQL copied to clipboard")
+    } catch {
+      toast.error("Couldn't copy to clipboard")
+    }
+  }
+
+  return (
+    <div className="mt-1.5 border-t border-border/60 pt-1 text-xs text-muted-foreground">
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-1.5 px-1 py-0.5 text-left"
+      >
+        <CodeIcon className="size-3 shrink-0" />
+        <span>Source query</span>
+        {queryName ? (
+          <span className="truncate font-medium text-foreground/80">{queryName}</span>
+        ) : null}
+        <ChevronRightIcon
+          className={cn("ml-auto size-3 shrink-0 transition-transform", expanded && "rotate-90")}
+        />
+      </button>
+      {expanded ? (
+        <div className="px-1 pb-0.5">
+          <pre className="max-h-60 overflow-auto rounded bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
+            {sql}
+          </pre>
+          <div className="mt-1">
+            <Button variant="ghost" size="xs" onClick={() => void copy()}>
+              <CopyIcon data-icon="inline-start" /> Copy
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 }
 

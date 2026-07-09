@@ -1,4 +1,4 @@
-import { memo, useContext, useState } from "react"
+import { memo, useContext, useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import {
   CheckIcon,
@@ -187,7 +187,16 @@ function RunSqlRow({
   )
 }
 
-export function TranscriptRow({ item }: { item: TranscriptItem }) {
+export function TranscriptRow({
+  item,
+  sourceSql,
+  sourceQueryName,
+}: {
+  item: TranscriptItem
+  /** For chart items: the SQL of the run_sql call that produced the data. */
+  sourceSql?: string
+  sourceQueryName?: string
+}) {
   switch (item.kind) {
     case "user":
       return (
@@ -258,7 +267,7 @@ export function TranscriptRow({ item }: { item: TranscriptItem }) {
         </div>
       )
     case "chart":
-      return <ChartView spec={item.spec} />
+      return <ChartView spec={item.spec} sourceSql={sourceSql} sourceQueryName={sourceQueryName} />
     case "ask_user":
       return (
         <div className="rounded-md border border-amber-400/40 bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
@@ -274,7 +283,36 @@ export function TranscriptRow({ item }: { item: TranscriptItem }) {
   }
 }
 
-const MemoTranscriptRow = memo(TranscriptRow, (prev, next) => prev.item === next.item)
+const MemoTranscriptRow = memo(
+  TranscriptRow,
+  (prev, next) =>
+    prev.item === next.item &&
+    prev.sourceSql === next.sourceSql &&
+    prev.sourceQueryName === next.sourceQueryName,
+)
+
+/**
+ * The run_sql call each chart's data came from, keyed by chart item id: the
+ * closest run_sql preceding the chart in the transcript. The spec itself
+ * carries only shaped data rows, so this is how a chart links back to its
+ * source query (for live streams and rehydrated chats alike).
+ */
+function chartSources(items: TranscriptItem[]): Map<string, { sql: string; name?: string }> {
+  const map = new Map<string, { sql: string; name?: string }>()
+  let last: { sql: string; name?: string } | null = null
+  for (const it of items) {
+    if (it.kind === "tool" && it.name === "run_sql") {
+      const input = it.input as { sql?: unknown; name?: unknown } | null
+      if (typeof input?.sql === "string" && input.sql.trim() !== "") {
+        const name = typeof input.name === "string" ? input.name.trim() : ""
+        last = { sql: input.sql, name: name || undefined }
+      }
+    } else if (it.kind === "chart" && last) {
+      map.set(it.id, last)
+    }
+  }
+  return map
+}
 
 /**
  * Renders a conversation: the transcript rows, a streaming indicator while the
@@ -291,13 +329,19 @@ export function Transcript({
   pendingQuestion: string | null
   emptyState: ReactNode
 }) {
+  const sources = useMemo(() => chartSources(items), [items])
   if (items.length === 0 && !streaming) {
     return <div className="text-xs text-muted-foreground">{emptyState}</div>
   }
   return (
     <div className="flex flex-col gap-3">
       {items.map((it) => (
-        <MemoTranscriptRow key={it.id} item={it} />
+        <MemoTranscriptRow
+          key={it.id}
+          item={it}
+          sourceSql={sources.get(it.id)?.sql}
+          sourceQueryName={sources.get(it.id)?.name}
+        />
       ))}
       {streaming && !pendingQuestion ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
