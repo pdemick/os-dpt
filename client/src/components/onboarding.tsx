@@ -74,7 +74,7 @@ export function Onboarding({ onFinished }: { onFinished: () => void }) {
             <DatabaseIcon className="size-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold">Welcome to dpt</h1>
+            <h1 className="text-2xl font-semibold">Welcome to Data Profile Tool</h1>
             <p className="text-sm text-muted-foreground">
               A couple of steps and you're ready to query.
             </p>
@@ -148,7 +148,7 @@ export function Onboarding({ onFinished }: { onFinished: () => void }) {
             onClick={onFinished}
             disabled={!hasConnection || !hasAnthropicKey}
           >
-            Open dpt
+            Open Data Profile Tool
           </Button>
         </div>
       </div>
