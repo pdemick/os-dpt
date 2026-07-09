@@ -51,10 +51,17 @@ function detailSnapshots(
   const leading = Math.max(0, prefix - DETAIL_CONTEXT_LINES)
   const trailing = Math.max(0, suffix - DETAIL_CONTEXT_LINES)
   if (leading === 0 && trailing === 0) return { before, after }
+  // If the trimmed-away prefix ends inside an open code fence, the client
+  // can't tell once the opening ``` is gone — flag it so in-fence chunks
+  // render as plain text instead of markdown.
+  let fences = 0
+  for (let i = 0; i < leading; i++) {
+    if (/^\s{0,3}(```|~~~)/.test(a[i])) fences++
+  }
   return {
     before: a.slice(leading, a.length - trailing).join("\n"),
     after: b.slice(leading, b.length - trailing).join("\n"),
-    trimmed: { leading, trailing },
+    trimmed: { leading, trailing, ...(fences % 2 === 1 ? { inFence: true } : {}) },
   }
 }
 

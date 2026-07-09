@@ -142,9 +142,11 @@ export interface ContextUpdateDetail {
   /**
    * Unchanged lines trimmed from the start/end of both snapshots, when the
    * shared prefix/suffix exceeded the context kept around the change. The UI
-   * shows these as hidden-line markers.
+   * shows these as hidden-line markers. `inFence` marks the trimmed prefix
+   * ending inside an open code fence, so the UI knows the snapshots start
+   * mid-fence even though the opening ``` was trimmed away.
    */
-  trimmed?: { leading: number; trailing: number }
+  trimmed?: { leading: number; trailing: number; inFence?: boolean }
 }
 
 export type AgentEvent =

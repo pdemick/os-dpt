@@ -42,6 +42,11 @@ interface Chunk {
   lines: string[]
 }
 
+interface AnnotatedChunk extends Chunk {
+  /** The document is inside an open code fence where this chunk starts. */
+  startsInFence: boolean
+}
+
 function toLines(text: string): string[] {
   // Strip one trailing newline so files ending in "\n" don't diff with a
   // phantom empty last line.
@@ -128,27 +133,65 @@ function HiddenLines({ count }: { count: number }) {
   )
 }
 
-/**
- * True when the text opens a code fence it doesn't close (or vice versa) —
- * the signature of a fenced block split across a diff-chunk boundary.
- */
-function hasUnbalancedFence(text: string): boolean {
+/** True when rendering these lines flips fence state (odd number of fence markers). */
+function fenceToggles(lines: string[]): boolean {
   let count = 0
-  for (const line of text.split("\n")) {
+  for (const line of lines) {
     if (/^\s{0,3}(```|~~~)/.test(line)) count++
   }
   return count % 2 === 1
 }
 
 /**
- * Chunk text rendered as markdown — unless a code fence was split across the
- * chunk boundary, where a stray ``` would flip everything after it into (or
- * out of) a code block. Those chunks fall back to faithful preformatted plain
- * text. Other constructs split mid-chunk (tables, lists) degrade gracefully
- * enough as markdown that they aren't special-cased.
+ * Tag each chunk with whether it starts inside an open code fence. Removed
+ * chunks exist only in the before-document and added chunks only in the
+ * after-document, so fence state is tracked per side — a fence opened in an
+ * added chunk doesn't put subsequent removed lines inside a fence. A same
+ * chunk counts as in-fence when either side is (rendering as plain text is
+ * the faithful degradation).
  */
-function ChunkProse({ children, className }: { children: string; className?: string }) {
-  if (hasUnbalancedFence(children)) {
+function annotateFences(chunks: Chunk[], initialInFence: boolean): AnnotatedChunk[] {
+  let beforeInFence = initialInFence
+  let afterInFence = initialInFence
+  return chunks.map((chunk) => {
+    const toggles = fenceToggles(chunk.lines)
+    let startsInFence: boolean
+    if (chunk.kind === "removed") {
+      startsInFence = beforeInFence
+      if (toggles) beforeInFence = !beforeInFence
+    } else if (chunk.kind === "added") {
+      startsInFence = afterInFence
+      if (toggles) afterInFence = !afterInFence
+    } else {
+      startsInFence = beforeInFence || afterInFence
+      if (toggles) {
+        beforeInFence = !beforeInFence
+        afterInFence = !afterInFence
+      }
+    }
+    return { ...chunk, startsInFence }
+  })
+}
+
+/**
+ * Chunk text rendered as markdown — unless it starts inside a code fence
+ * opened in an earlier chunk (or the trimmed-away prefix), or a fence was
+ * split across the chunk boundary; either way a stray or missing ``` would
+ * flip everything after it into (or out of) a code block. Those chunks fall
+ * back to faithful preformatted plain text. Other constructs split mid-chunk
+ * (tables, lists) degrade gracefully enough as markdown that they aren't
+ * special-cased.
+ */
+function ChunkProse({
+  children,
+  inFence = false,
+  className,
+}: {
+  children: string
+  inFence?: boolean
+  className?: string
+}) {
+  if (inFence || fenceToggles(children.split("\n"))) {
     return (
       <pre
         className={cn(
@@ -163,21 +206,30 @@ function ChunkProse({ children, className }: { children: string; className?: str
   return <MarkdownProse className={className}>{children}</MarkdownProse>
 }
 
-function SameChunk({ lines }: { lines: string[] }) {
+function SameChunk({ lines, startsInFence }: { lines: string[]; startsInFence: boolean }) {
   if (lines.length > SAME_CHUNK_MAX_LINES) {
+    // Fence markers hidden in the collapsed middle still flip the state the
+    // trailing context starts in.
+    const tailInFence = fenceToggles(lines.slice(0, -SAME_CHUNK_CONTEXT_LINES))
+      ? !startsInFence
+      : startsInFence
     return (
       <>
-        <ChunkProse className="opacity-60">
+        <ChunkProse inFence={startsInFence} className="opacity-60">
           {lines.slice(0, SAME_CHUNK_CONTEXT_LINES).join("\n")}
         </ChunkProse>
         <HiddenLines count={lines.length - SAME_CHUNK_CONTEXT_LINES * 2} />
-        <ChunkProse className="opacity-60">
+        <ChunkProse inFence={tailInFence} className="opacity-60">
           {lines.slice(-SAME_CHUNK_CONTEXT_LINES).join("\n")}
         </ChunkProse>
       </>
     )
   }
-  return <ChunkProse className="opacity-60">{lines.join("\n")}</ChunkProse>
+  return (
+    <ChunkProse inFence={startsInFence} className="opacity-60">
+      {lines.join("\n")}
+    </ChunkProse>
+  )
 }
 
 /**
@@ -185,7 +237,9 @@ function SameChunk({ lines }: { lines: string[] }) {
  * removed/added chunks get red/green tinting, unchanged context renders dimmed
  * (long runs collapsed), and everything is rendered markdown rather than raw
  * `###` source. `trimmed` reports unchanged lines the server already dropped
- * from both snapshots; they render as the same hidden-line markers.
+ * from both snapshots; they render as the same hidden-line markers, and its
+ * `inFence` flag seeds the fence state when the dropped prefix ends inside an
+ * open code fence.
  */
 export function MarkdownDiff({
   before,
@@ -194,15 +248,18 @@ export function MarkdownDiff({
 }: {
   before: string
   after: string
-  trimmed?: { leading: number; trailing: number }
+  trimmed?: { leading: number; trailing: number; inFence?: boolean }
 }) {
-  const chunks = useMemo(() => diffLines(toLines(before), toLines(after)), [before, after])
+  const chunks = useMemo(
+    () => annotateFences(diffLines(toLines(before), toLines(after)), trimmed?.inFence ?? false),
+    [before, after, trimmed?.inFence],
+  )
   return (
     <div className="flex flex-col gap-1">
       {trimmed && trimmed.leading > 0 ? <HiddenLines count={trimmed.leading} /> : null}
       {chunks.map((chunk, i) =>
         chunk.kind === "same" ? (
-          <SameChunk key={i} lines={chunk.lines} />
+          <SameChunk key={i} lines={chunk.lines} startsInFence={chunk.startsInFence} />
         ) : (
           <div
             key={i}
@@ -213,7 +270,7 @@ export function MarkdownDiff({
                 : "border-red-600 bg-red-500/10",
             )}
           >
-            <ChunkProse>{chunk.lines.join("\n")}</ChunkProse>
+            <ChunkProse inFence={chunk.startsInFence}>{chunk.lines.join("\n")}</ChunkProse>
           </div>
         ),
       )}
