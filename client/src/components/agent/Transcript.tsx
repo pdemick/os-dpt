@@ -12,7 +12,6 @@ import { Streamdown } from "streamdown"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { DiffView } from "@/components/editor/DiffView"
 import { useAgent } from "@/lib/agent/context"
 import type { TranscriptItem } from "@/lib/agent/context"
 import { cn } from "@/lib/utils"
@@ -20,6 +19,7 @@ import { api as worksheetsApi } from "@/lib/worksheets/api"
 import { WorksheetsContext } from "@/lib/worksheets/context-object"
 
 import { ChartView } from "./ChartView"
+import { MarkdownDiff, MarkdownProse } from "./MarkdownDiff"
 
 type ToolItem = Extract<TranscriptItem, { kind: "tool" }>
 
@@ -190,11 +190,11 @@ function RunSqlRow({
 
 /**
  * An update_context call rendered as an expandable row. Expanded, it shows the
- * change to the context file as a red/green diff (the same MergeView the
- * editor's history panel uses), from the before/after snapshot the tool
- * attaches to its result. Rehydrated chats don't carry that snapshot (like
- * tool summaries, it's live-stream only), so they fall back to showing the
- * markdown the agent wrote.
+ * change to the context file as a git-style red/green diff of rendered
+ * markdown, from the before/after snapshot the tool attaches to its result.
+ * Rehydrated chats don't carry that snapshot (like tool summaries, it's
+ * live-stream only), so they fall back to rendering the markdown the agent
+ * wrote.
  */
 function UpdateContextRow({ item }: { item: ToolItem }) {
   const [expanded, setExpanded] = useState(false)
@@ -228,15 +228,13 @@ function UpdateContextRow({ item }: { item: ToolItem }) {
       </button>
       {expanded ? (
         <div className="border-t border-border/60 px-2 py-1.5">
-          {item.detail ? (
-            <div className="h-64 overflow-hidden rounded border border-border/60 bg-background">
-              <DiffView past={item.detail.before} current={item.detail.after} />
-            </div>
-          ) : (
-            <pre className="max-h-60 overflow-auto rounded bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
-              {fallbackContent}
-            </pre>
-          )}
+          <div className="max-h-80 overflow-auto rounded bg-background/60 p-1.5 text-foreground">
+            {item.detail ? (
+              <MarkdownDiff before={item.detail.before} after={item.detail.after} />
+            ) : (
+              <MarkdownProse>{fallbackContent}</MarkdownProse>
+            )}
+          </div>
         </div>
       ) : null}
     </div>
