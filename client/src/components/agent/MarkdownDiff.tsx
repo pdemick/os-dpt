@@ -128,21 +128,56 @@ function HiddenLines({ count }: { count: number }) {
   )
 }
 
+/**
+ * True when the text opens a code fence it doesn't close (or vice versa) —
+ * the signature of a fenced block split across a diff-chunk boundary.
+ */
+function hasUnbalancedFence(text: string): boolean {
+  let count = 0
+  for (const line of text.split("\n")) {
+    if (/^\s{0,3}(```|~~~)/.test(line)) count++
+  }
+  return count % 2 === 1
+}
+
+/**
+ * Chunk text rendered as markdown — unless a code fence was split across the
+ * chunk boundary, where a stray ``` would flip everything after it into (or
+ * out of) a code block. Those chunks fall back to faithful preformatted plain
+ * text. Other constructs split mid-chunk (tables, lists) degrade gracefully
+ * enough as markdown that they aren't special-cased.
+ */
+function ChunkProse({ children, className }: { children: string; className?: string }) {
+  if (hasUnbalancedFence(children)) {
+    return (
+      <pre
+        className={cn(
+          "overflow-x-auto font-mono text-[11px] leading-relaxed whitespace-pre-wrap",
+          className,
+        )}
+      >
+        {children}
+      </pre>
+    )
+  }
+  return <MarkdownProse className={className}>{children}</MarkdownProse>
+}
+
 function SameChunk({ lines }: { lines: string[] }) {
   if (lines.length > SAME_CHUNK_MAX_LINES) {
     return (
       <>
-        <MarkdownProse className="opacity-60">
+        <ChunkProse className="opacity-60">
           {lines.slice(0, SAME_CHUNK_CONTEXT_LINES).join("\n")}
-        </MarkdownProse>
+        </ChunkProse>
         <HiddenLines count={lines.length - SAME_CHUNK_CONTEXT_LINES * 2} />
-        <MarkdownProse className="opacity-60">
+        <ChunkProse className="opacity-60">
           {lines.slice(-SAME_CHUNK_CONTEXT_LINES).join("\n")}
-        </MarkdownProse>
+        </ChunkProse>
       </>
     )
   }
-  return <MarkdownProse className="opacity-60">{lines.join("\n")}</MarkdownProse>
+  return <ChunkProse className="opacity-60">{lines.join("\n")}</ChunkProse>
 }
 
 /**
@@ -178,7 +213,7 @@ export function MarkdownDiff({
                 : "border-red-600 bg-red-500/10",
             )}
           >
-            <MarkdownProse>{chunk.lines.join("\n")}</MarkdownProse>
+            <ChunkProse>{chunk.lines.join("\n")}</ChunkProse>
           </div>
         ),
       )}
