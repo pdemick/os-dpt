@@ -11,9 +11,12 @@ const PIN_THRESHOLD = 40
  *
  * Attach `ref` to the scrollable element and `onScroll` to its scroll event;
  * pass the value whose changes should trigger a follow (e.g. the transcript
- * items) as `dep`.
+ * items) as `dep`. `resetKey` identifies the conversation being shown (e.g.
+ * the session id): when it changes the pin re-engages and the container jumps
+ * to the bottom, so a scroll position left in one chat doesn't leak into the
+ * next.
  */
-export function useStickToBottom<T extends HTMLElement>(dep: unknown) {
+export function useStickToBottom<T extends HTMLElement>(dep: unknown, resetKey?: unknown) {
   const ref = useRef<T>(null)
   const pinned = useRef(true)
 
@@ -24,10 +27,18 @@ export function useStickToBottom<T extends HTMLElement>(dep: unknown) {
   }, [])
 
   useEffect(() => {
+    pinned.current = true
     const el = ref.current
-    if (el && pinned.current) {
-      el.scrollTop = el.scrollHeight
-    }
+    if (el) el.scrollTop = el.scrollHeight
+  }, [resetKey])
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    // A container short enough not to scroll can never fire the scroll event
+    // that re-engages the pin — re-pin it here so growth resumes following.
+    if (el.scrollHeight <= el.clientHeight) pinned.current = true
+    if (pinned.current) el.scrollTop = el.scrollHeight
   }, [dep])
 
   return { ref, onScroll }

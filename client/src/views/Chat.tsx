@@ -128,8 +128,8 @@ function ChatRow({
 }
 
 function Conversation() {
-  const { items, streaming, pendingQuestion, send, answer } = useAgent()
-  const { ref: scrollRef, onScroll } = useStickToBottom<HTMLDivElement>(items)
+  const { session, items, streaming, pendingQuestion, send, answer } = useAgent()
+  const { ref: scrollRef, onScroll } = useStickToBottom<HTMLDivElement>(items, session?.id ?? null)
 
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-background">

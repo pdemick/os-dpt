@@ -8,10 +8,20 @@ import { Composer } from "./Composer"
 import { Transcript } from "./Transcript"
 
 export function ChatPanel() {
-  const { isOpen, close, newChat, items, streaming, pendingQuestion, send, answer, exploreOnly } =
-    useAgent()
+  const {
+    isOpen,
+    close,
+    newChat,
+    session,
+    items,
+    streaming,
+    pendingQuestion,
+    send,
+    answer,
+    exploreOnly,
+  } = useAgent()
 
-  const { ref: scrollRef, onScroll } = useStickToBottom<HTMLDivElement>(items)
+  const { ref: scrollRef, onScroll } = useStickToBottom<HTMLDivElement>(items, session?.id ?? null)
 
   if (!isOpen) return null
 
