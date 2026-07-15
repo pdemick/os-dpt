@@ -48,6 +48,8 @@ Created on first run in the user's **current directory**. `os-dpt` treats the cw
 │   └── credentials.enc       # AES-GCM blob; key lives in OS keychain
 ├── worksheets/               # git-tracked SQL worksheets, one file per worksheet
 │   └── <slug>.sql
+├── dashboards/               # git-tracked dashboards, one JSON file per dashboard
+│   └── <slug>.json           # chart definitions (sql + connectionId + chart config) — never result data
 ├── context/                  # git-tracked agent memory (markdown), scoped per data source
 │   ├── schemas.md            # "unassigned" set — used when no connection is bound
 │   ├── conventions.md
@@ -117,6 +119,7 @@ The npm package (this repo) and a user's workspace are fully separate concerns:
 - pnpm monorepo: `client` + `server` workspaces, root scripts orchestrate both (`pnpm dev` runs Vite + Hono in parallel).
 - **Connections module live**: Hono server on `127.0.0.1:3756`, `/api/connections` (list/create/delete/test/connect/disconnect), AES-256-GCM credential vault in `.os-dpt/credentials.enc`, in-process `pg` pool registry, SIGINT/SIGTERM-driven graceful shutdown. Connections UI rebuilt with Active/Saved sections + Add dialog (Postgres-only).
 - **Worksheets module live**: CodeMirror 6 (Postgres dialect) editor with schema-aware autocomplete from `.os-dpt/schema.json`. Each tab is a `.sql` file in `worksheets/`; `Cmd+S` writes the git-tracked file, debounced autosave keeps a draft in `.os-dpt/drafts/<slug>.sql`. Open tabs / active tab / cursor restored from `.os-dpt/session.json`. Routes: `/api/worksheets`, `/api/drafts`, `/api/session`, `/api/schema`.
+- **Dashboards module live**: charts rendered by the chat agent can be saved to git-tracked `dashboards/<slug>.json` files (chart config + source SQL + connection id — result data is never persisted; it's re-fetched via the connection query route on open/refresh). Dashboards view: list rail + chart grid, per-dashboard Refresh, right-click menu (view source query / refresh / remove). The source-query editor dialog reuses CodeMirror + ResultTable and embeds a chat-to-SQL prompt driven by a slug-less `quick-edit` agent session — `write_sql` with no worksheet bound skips the draft write and streams the SQL back via a `sql_written` event with `worksheetSlug: null`.
 - Shared types live in `shared/`, consumed by both packages via `@shared/*`.
 - Client app shell: `SidebarProvider` + `AppSidebar` with Worksheets / Connections / Settings; Settings view is still a blank placeholder.
 
