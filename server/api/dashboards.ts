@@ -66,6 +66,25 @@ async function listSlugs(): Promise<string[]> {
   return entries.filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -5))
 }
 
+// Serialize mutations per dashboard: each one is a read-modify-write over the
+// whole file, so two concurrent requests (e.g. from two browser tabs) could
+// otherwise interleave and silently drop each other's changes.
+const mutationTails = new Map<string, Promise<void>>()
+
+function withDashboardLock<T>(slug: string, fn: () => Promise<T>): Promise<T> {
+  const prev = mutationTails.get(slug) ?? Promise.resolve()
+  const result = prev.then(fn)
+  const tail = result.then(
+    () => undefined,
+    () => undefined,
+  )
+  mutationTails.set(slug, tail)
+  void tail.then(() => {
+    if (mutationTails.get(slug) === tail) mutationTails.delete(slug)
+  })
+  return result
+}
+
 /** Validates a client-supplied chart payload. Returns the clean chart or an error string. */
 function parseChart(raw: unknown): NewDashboardChart | string {
   if (!raw || typeof raw !== "object") return "chart must be an object"
@@ -133,34 +152,42 @@ app.get("/:slug", async (c) => {
 app.patch("/:slug", async (c) => {
   const slug = c.req.param("slug")
   assertSafeSlug(slug)
-  const dashboard = await readDashboard(slug)
-  if (!dashboard) return c.json({ error: "not_found" }, 404)
   const body = await c.req.json<{ name?: string }>().catch(() => ({}) as { name?: string })
   const raw = (body.name ?? "").trim()
   if (!raw) return c.json({ error: "empty_name" }, 400)
-  dashboard.name = raw.length > MAX_NAME_LEN ? raw.slice(0, MAX_NAME_LEN) : raw
-  return c.json(await persist(dashboard))
+  return withDashboardLock(slug, async () => {
+    const dashboard = await readDashboard(slug)
+    if (!dashboard) return c.json({ error: "not_found" }, 404)
+    dashboard.name = raw.length > MAX_NAME_LEN ? raw.slice(0, MAX_NAME_LEN) : raw
+    return c.json(await persist(dashboard))
+  })
 })
 
 app.delete("/:slug", async (c) => {
   const slug = c.req.param("slug")
   assertSafeSlug(slug)
-  await fs.rm(paths.dashboard(slug), { force: true })
-  return c.json({ ok: true })
+  // Locked so an in-flight mutation can't persist after the rm and
+  // resurrect the file.
+  return withDashboardLock(slug, async () => {
+    await fs.rm(paths.dashboard(slug), { force: true })
+    return c.json({ ok: true })
+  })
 })
 
 app.post("/:slug/charts", async (c) => {
   const slug = c.req.param("slug")
   assertSafeSlug(slug)
-  const dashboard = await readDashboard(slug)
-  if (!dashboard) return c.json({ error: "not_found" }, 404)
   const body = await c.req.json<unknown>().catch(() => null)
   const parsed = parseChart(body)
   if (typeof parsed === "string") return c.json({ error: parsed }, 400)
-  const position = dashboard.charts.reduce((max, ch) => Math.max(max, ch.position), -1) + 1
-  const chart: DashboardChart = { ...parsed, id: randomUUID(), position }
-  dashboard.charts.push(chart)
-  return c.json(await persist(dashboard))
+  return withDashboardLock(slug, async () => {
+    const dashboard = await readDashboard(slug)
+    if (!dashboard) return c.json({ error: "not_found" }, 404)
+    const position = dashboard.charts.reduce((max, ch) => Math.max(max, ch.position), -1) + 1
+    const chart: DashboardChart = { ...parsed, id: randomUUID(), position }
+    dashboard.charts.push(chart)
+    return c.json(await persist(dashboard))
+  })
 })
 
 app.put("/:slug/charts/:chartId", async (c) => {
@@ -170,29 +197,33 @@ app.put("/:slug/charts/:chartId", async (c) => {
   // paths), so membership is the validation — hand-edited non-UUID ids
   // stay addressable.
   const chartId = c.req.param("chartId")
-  const dashboard = await readDashboard(slug)
-  if (!dashboard) return c.json({ error: "not_found" }, 404)
-  const chart = dashboard.charts.find((ch) => ch.id === chartId)
-  if (!chart) return c.json({ error: "not_found" }, 404)
   const body = await c.req.json<DashboardChartPatch>().catch(() => ({}) as DashboardChartPatch)
-  // Validate the patch by merging it over the existing chart and re-parsing,
-  // so partial updates get the same checks as creation.
-  const parsed = parseChart({ ...chart, ...body })
-  if (typeof parsed === "string") return c.json({ error: parsed }, 400)
-  Object.assign(chart, parsed)
-  return c.json(await persist(dashboard))
+  return withDashboardLock(slug, async () => {
+    const dashboard = await readDashboard(slug)
+    if (!dashboard) return c.json({ error: "not_found" }, 404)
+    const chart = dashboard.charts.find((ch) => ch.id === chartId)
+    if (!chart) return c.json({ error: "not_found" }, 404)
+    // Validate the patch by merging it over the existing chart and re-parsing,
+    // so partial updates get the same checks as creation.
+    const parsed = parseChart({ ...chart, ...body })
+    if (typeof parsed === "string") return c.json({ error: parsed }, 400)
+    Object.assign(chart, parsed)
+    return c.json(await persist(dashboard))
+  })
 })
 
 app.delete("/:slug/charts/:chartId", async (c) => {
   const slug = c.req.param("slug")
   assertSafeSlug(slug)
   const chartId = c.req.param("chartId")
-  const dashboard = await readDashboard(slug)
-  if (!dashboard) return c.json({ error: "not_found" }, 404)
-  const before = dashboard.charts.length
-  dashboard.charts = dashboard.charts.filter((ch) => ch.id !== chartId)
-  if (dashboard.charts.length === before) return c.json({ error: "not_found" }, 404)
-  return c.json(await persist(dashboard))
+  return withDashboardLock(slug, async () => {
+    const dashboard = await readDashboard(slug)
+    if (!dashboard) return c.json({ error: "not_found" }, 404)
+    const before = dashboard.charts.length
+    dashboard.charts = dashboard.charts.filter((ch) => ch.id !== chartId)
+    if (dashboard.charts.length === before) return c.json({ error: "not_found" }, 404)
+    return c.json(await persist(dashboard))
+  })
 })
 
 export default app
