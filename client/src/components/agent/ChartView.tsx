@@ -1,5 +1,13 @@
 import { useMemo, useRef, useState } from "react"
-import { ChevronRightIcon, CodeIcon, CopyIcon, ImageDownIcon, LayoutDashboardIcon } from "lucide-react"
+import type { ReactNode } from "react"
+import {
+  ChevronRightIcon,
+  CodeIcon,
+  CopyIcon,
+  ImageDownIcon,
+  LayoutDashboardIcon,
+  PencilIcon,
+} from "lucide-react"
 import {
   Area,
   AreaChart,
@@ -78,6 +86,8 @@ export function ChartView({
   sourceSql,
   sourceQueryName,
   onSave,
+  onEditSource,
+  actions,
 }: {
   spec: ChartSpec
   /** SQL of the run_sql call that produced this chart's data, when known. */
@@ -85,6 +95,10 @@ export function ChartView({
   sourceQueryName?: string
   /** When set, shows a "Save to dashboard" action next to copy-as-image. */
   onSave?: () => void
+  /** When set, the expanded source-query footer gets an Edit button. */
+  onEditSource?: () => void
+  /** Extra header actions (rendered before copy-as-image). */
+  actions?: ReactNode
 }) {
   const figureRef = useRef<HTMLElement>(null)
   const series = useMemo(() => normalizeSeries(spec.series), [spec.series])
@@ -132,6 +146,7 @@ export function ChartView({
           </figcaption>
         ) : null}
         <div className="ml-auto flex shrink-0 items-center">
+          {actions}
           {onSave ? (
             <Button
               variant="ghost"
@@ -159,7 +174,9 @@ export function ChartView({
           {renderChart(spec.type, spec.x, series, data)}
         </ResponsiveContainer>
       </div>
-      {sourceSql ? <SourceQuery sql={sourceSql} queryName={sourceQueryName} /> : null}
+      {sourceSql ? (
+        <SourceQuery sql={sourceSql} queryName={sourceQueryName} onEdit={onEditSource} />
+      ) : null}
     </figure>
   )
 }
@@ -168,7 +185,15 @@ export function ChartView({
  * Collapsed-by-default footer linking a chart back to the SQL that produced
  * its data (the closest preceding run_sql call in the transcript).
  */
-function SourceQuery({ sql, queryName }: { sql: string; queryName?: string }) {
+function SourceQuery({
+  sql,
+  queryName,
+  onEdit,
+}: {
+  sql: string
+  queryName?: string
+  onEdit?: () => void
+}) {
   const [expanded, setExpanded] = useState(false)
 
   const copy = async () => {
@@ -200,7 +225,12 @@ function SourceQuery({ sql, queryName }: { sql: string; queryName?: string }) {
       {expanded ? (
         <div className="px-1 pb-0.5">
           <SqlPreview value={sql} />
-          <div className="mt-1">
+          <div className="mt-1 flex items-center gap-1">
+            {onEdit ? (
+              <Button variant="ghost" size="xs" onClick={onEdit}>
+                <PencilIcon data-icon="inline-start" /> Edit
+              </Button>
+            ) : null}
             <Button variant="ghost" size="xs" onClick={() => void copy()}>
               <CopyIcon data-icon="inline-start" /> Copy
             </Button>

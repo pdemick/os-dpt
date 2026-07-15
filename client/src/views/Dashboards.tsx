@@ -220,7 +220,7 @@ function DashboardDetail({
                 key={chart.id}
                 chart={chart}
                 state={stateFor(chart.id, chart.connectionId)}
-                onViewSource={() => setEditing(chart.id)}
+                onEditSource={() => setEditing(chart.id)}
                 onRefresh={() => refreshOne(chart)}
                 onRemove={() => void removeChart(chart.id)}
               />
