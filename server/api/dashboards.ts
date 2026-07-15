@@ -19,8 +19,6 @@ const app = new Hono()
 const MAX_NAME_LEN = 80
 const MAX_TITLE_LEN = 120
 
-const CHART_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 async function readDashboard(slug: string): Promise<Dashboard | null> {
   try {
     const raw = await fs.readFile(paths.dashboard(slug), "utf8")
@@ -32,18 +30,28 @@ async function readDashboard(slug: string): Promise<Dashboard | null> {
 }
 
 // Backfill missing fields on read so schema evolution never breaks old files
-// (same forward-compat posture as chats' ensureUsageFields).
+// (same forward-compat posture as chats' ensureUsageFields). dashboards/ is
+// git-tracked and hand-editable, so stored charts get the same validation as
+// client payloads — entries with no usable type/x/sql/series are dropped
+// (and fall out of the file on the next write).
 function normalize(slug: string, d: Dashboard): Dashboard {
   return {
     slug,
     name: typeof d.name === "string" && d.name.trim() !== "" ? d.name : slug,
     createdAt: d.createdAt ?? new Date(0).toISOString(),
     updatedAt: d.updatedAt ?? new Date(0).toISOString(),
-    charts: (Array.isArray(d.charts) ? d.charts : []).map((chart, i) => ({
-      ...chart,
-      connectionId: chart.connectionId ?? null,
-      position: typeof chart.position === "number" ? chart.position : i,
-    })),
+    charts: (Array.isArray(d.charts) ? d.charts : []).flatMap((chart, i) => {
+      const parsed = parseChart(chart)
+      if (typeof parsed === "string") return []
+      const c = chart as { id?: unknown; position?: unknown }
+      return [
+        {
+          ...parsed,
+          id: typeof c.id === "string" && c.id !== "" ? c.id : randomUUID(),
+          position: typeof c.position === "number" ? c.position : i,
+        },
+      ]
+    }),
   }
 }
 
@@ -158,8 +166,10 @@ app.post("/:slug/charts", async (c) => {
 app.put("/:slug/charts/:chartId", async (c) => {
   const slug = c.req.param("slug")
   assertSafeSlug(slug)
+  // Chart ids are only ever compared against stored ids (never used in
+  // paths), so membership is the validation — hand-edited non-UUID ids
+  // stay addressable.
   const chartId = c.req.param("chartId")
-  if (!CHART_ID_RE.test(chartId)) return c.json({ error: "invalid_chart_id" }, 400)
   const dashboard = await readDashboard(slug)
   if (!dashboard) return c.json({ error: "not_found" }, 404)
   const chart = dashboard.charts.find((ch) => ch.id === chartId)
@@ -177,7 +187,6 @@ app.delete("/:slug/charts/:chartId", async (c) => {
   const slug = c.req.param("slug")
   assertSafeSlug(slug)
   const chartId = c.req.param("chartId")
-  if (!CHART_ID_RE.test(chartId)) return c.json({ error: "invalid_chart_id" }, 400)
   const dashboard = await readDashboard(slug)
   if (!dashboard) return c.json({ error: "not_found" }, 404)
   const before = dashboard.charts.length
