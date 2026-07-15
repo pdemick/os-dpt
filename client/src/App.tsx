@@ -8,12 +8,14 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { api } from "@/lib/api"
 import { Chat } from "@/views/Chat"
 import { Connections } from "@/views/Connections"
+import { Dashboards } from "@/views/Dashboards"
 import { Documentation } from "@/views/Documentation"
 import { Settings } from "@/views/Settings"
 import { Worksheets } from "@/views/Worksheets"
 
 const views: Record<View, React.ComponentType> = {
   worksheets: Worksheets,
+  dashboards: Dashboards,
   connections: Connections,
   chat: Chat,
   documentation: Documentation,

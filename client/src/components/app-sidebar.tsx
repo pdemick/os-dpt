@@ -3,6 +3,7 @@ import {
   BookOpenIcon,
   DatabaseIcon,
   FileTextIcon,
+  LayoutDashboardIcon,
   SparklesIcon,
   Settings2Icon,
 } from "lucide-react"
@@ -18,7 +19,13 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 
-export type View = "worksheets" | "connections" | "chat" | "documentation" | "settings"
+export type View =
+  | "worksheets"
+  | "dashboards"
+  | "connections"
+  | "chat"
+  | "documentation"
+  | "settings"
 
 const navItems: {
   id: View
@@ -27,6 +34,7 @@ const navItems: {
 }[] = [
   { id: "chat", title: "Chat", icon: SparklesIcon },
   { id: "worksheets", title: "Worksheets", icon: FileTextIcon },
+  { id: "dashboards", title: "Dashboards", icon: LayoutDashboardIcon },
   { id: "connections", title: "Connections", icon: DatabaseIcon },
   { id: "documentation", title: "Documentation", icon: BookOpenIcon },
   { id: "settings", title: "Settings", icon: Settings2Icon },
