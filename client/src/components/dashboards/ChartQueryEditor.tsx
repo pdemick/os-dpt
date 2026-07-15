@@ -87,6 +87,10 @@ export function ChartQueryEditor({
       setRunning(true)
       try {
         setResult(await worksheetsApi.runQuery(chart.connectionId, text))
+      } catch (err) {
+        // runQuery folds HTTP/SQL failures into ok:false; only network-level
+        // errors reach here. Surface them in the same results slot.
+        setResult({ ok: false, error: (err as Error).message })
       } finally {
         setRunning(false)
       }
