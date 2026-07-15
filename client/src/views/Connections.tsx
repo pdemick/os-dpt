@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react"
-import type { ReactNode } from "react"
 import { DatabaseIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
 import type { AccessMode, Connection } from "@shared/connections.ts"
@@ -103,9 +102,6 @@ export function Connections() {
     void refresh()
   }
 
-  const active = connections.filter((c) => c.active)
-  const saved = connections.filter((c) => !c.active)
-
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
@@ -132,46 +128,19 @@ export function Connections() {
       ) : connections.length === 0 ? (
         <EmptyState onAdd={openAdd} />
       ) : (
-        <div className="flex flex-col gap-6">
-          <Section title="Active" count={active.length}>
-            {active.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No active connections.
-              </p>
-            ) : (
-              active.map((conn) => (
-                <ConnectionRow
-                  key={conn.id}
-                  conn={conn}
-                  busy={busyId === conn.id}
-                  onDisconnect={() => handleDisconnect(conn.id)}
-                  onEdit={() => openEdit(conn)}
-                  onDelete={() => handleDelete(conn.id)}
-                  onAccessMode={(mode) => handleAccessMode(conn.id, mode)}
-                />
-              ))
-            )}
-          </Section>
-
-          <Section title="Saved" count={saved.length}>
-            {saved.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No saved connections.
-              </p>
-            ) : (
-              saved.map((conn) => (
-                <ConnectionRow
-                  key={conn.id}
-                  conn={conn}
-                  busy={busyId === conn.id}
-                  onConnect={() => handleConnect(conn.id)}
-                  onEdit={() => openEdit(conn)}
-                  onDelete={() => handleDelete(conn.id)}
-                  onAccessMode={(mode) => handleAccessMode(conn.id, mode)}
-                />
-              ))
-            )}
-          </Section>
+        <div className="flex flex-col gap-2">
+          {connections.map((conn) => (
+            <ConnectionRow
+              key={conn.id}
+              conn={conn}
+              busy={busyId === conn.id}
+              onConnect={() => handleConnect(conn.id)}
+              onDisconnect={() => handleDisconnect(conn.id)}
+              onEdit={() => openEdit(conn)}
+              onDelete={() => handleDelete(conn.id)}
+              onAccessMode={(mode) => handleAccessMode(conn.id, mode)}
+            />
+          ))}
         </div>
       )}
 
@@ -185,31 +154,11 @@ export function Connections() {
   )
 }
 
-function Section({
-  title,
-  count,
-  children,
-}: {
-  title: string
-  count: number
-  children: ReactNode
-}) {
-  return (
-    <section className="flex flex-col gap-2">
-      <header className="flex items-baseline gap-2">
-        <h2 className="text-sm font-medium text-foreground">{title}</h2>
-        <span className="text-xs text-muted-foreground">{count}</span>
-      </header>
-      <div className="flex flex-col gap-2">{children}</div>
-    </section>
-  )
-}
-
 type RowProps = {
   conn: Connection
   busy: boolean
-  onConnect?: () => void
-  onDisconnect?: () => void
+  onConnect: () => void
+  onDisconnect: () => void
   onEdit: () => void
   onDelete: () => void
   onAccessMode: (mode: AccessMode) => void
