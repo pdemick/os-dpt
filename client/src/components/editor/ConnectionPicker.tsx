@@ -1,5 +1,11 @@
-import { ChevronsUpDown, DatabaseIcon, CheckIcon } from "lucide-react"
+import {
+  ChevronsUpDown,
+  DatabaseIcon,
+  CheckIcon,
+  Loader2Icon,
+} from "lucide-react"
 import { useEffect, useState } from "react"
+import { toast } from "sonner"
 
 import type { Connection } from "@shared/connections"
 
@@ -23,8 +29,9 @@ interface Props {
 
 export function ConnectionPicker({ pulse = false }: Props) {
   const { session, setTabConnection } = useWorksheets()
-  const { active, connections, refresh } = useConnections()
+  const { active, connections, refresh, connect } = useConnections()
   const [open, setOpen] = useState(false)
+  const [connectingId, setConnectingId] = useState<string | null>(null)
 
   const slug = session.activeSlug
   const tab = slug ? session.openTabs.find((t) => t.slug === slug) : null
@@ -35,6 +42,23 @@ export function ConnectionPicker({ pulse = false }: Props) {
   const bound: Connection | null =
     (connectionId && connections.find((c) => c.id === connectionId)) || null
   const boundActive = bound?.active ?? false
+
+  const handleSelect = async (conn: Connection) => {
+    if (!slug) return
+    if (!conn.active) {
+      setConnectingId(conn.id)
+      const result = await connect(conn.id)
+      setConnectingId(null)
+      if (!result.ok) {
+        // Leave the menu open so the user can retry or pick another; the toast
+        // carries the reason.
+        toast.error(`Couldn't connect to ${conn.name}`, { description: result.error })
+        return
+      }
+    }
+    setTabConnection(slug, conn.id)
+    setOpen(false)
+  }
 
   // If a tab has no connection and there's exactly one active connection,
   // pre-select it. Suppressed once the user has explicitly picked or cleared
@@ -80,23 +104,42 @@ export function ConnectionPicker({ pulse = false }: Props) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-56">
-        <DropdownMenuLabel className="text-xs">Active connections</DropdownMenuLabel>
-        {active.length === 0 ? (
+        <DropdownMenuLabel className="text-xs">Connections</DropdownMenuLabel>
+        {connections.length === 0 ? (
           <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-            No active connections
+            No connections
           </DropdownMenuItem>
         ) : (
-          active.map((conn) => (
-            <DropdownMenuItem
-              key={conn.id}
-              onSelect={() => setTabConnection(slug, conn.id)}
-              className="text-xs"
-            >
-              <DatabaseIcon className="size-3" />
-              <span className="flex-1 truncate">{conn.name}</span>
-              {connectionId === conn.id && <CheckIcon className="size-3" />}
-            </DropdownMenuItem>
-          ))
+          connections.map((conn) => {
+            const isConnecting = connectingId === conn.id
+            return (
+              <DropdownMenuItem
+                key={conn.id}
+                // Keep the menu open so the spinner is visible while dialing;
+                // handleSelect closes it once the connection is live.
+                onSelect={(e) => {
+                  e.preventDefault()
+                  void handleSelect(conn)
+                }}
+                disabled={isConnecting}
+                className="text-xs"
+              >
+                <span
+                  className={cn(
+                    "size-1.5 shrink-0 rounded-full",
+                    conn.active ? "bg-emerald-500" : "bg-muted-foreground/40",
+                  )}
+                  title={conn.active ? "Active" : "Saved"}
+                />
+                <span className="flex-1 truncate">{conn.name}</span>
+                {isConnecting ? (
+                  <Loader2Icon className="size-3 animate-spin" />
+                ) : (
+                  connectionId === conn.id && <CheckIcon className="size-3" />
+                )}
+              </DropdownMenuItem>
+            )
+          })
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
