@@ -72,6 +72,7 @@ Rule of thumb: anything sensitive lives in `.os-dpt/` and is gitignored. Anythin
 ### Security posture
 - Server binds to `127.0.0.1` only. No authentication on the API; security relies on loopback isolation (any process running as the same user can hit the API, which is consistent with how DBeaver-class tools work locally).
 - The `Use SSL` checkbox on a connection sets `ssl: { rejectUnauthorized: false }` — traffic is encrypted, but the server certificate is **not** verified. This is intentional for v1 to avoid breaking against self-signed dev/staging hosts; a future `sslmode` field can opt into verification.
+- Opening or refreshing a dashboard **auto-executes** each chart's stored SQL against its bound connection — no explicit run step, unlike worksheets. Since `dashboards/` is git-tracked, pulling someone else's dashboard runs their SQL on your database on open; the connection's access mode is the guardrail.
 
 ### Agent memory
 - The agent's "learning" is just markdown files in `context/`. The `update_context` tool appends or edits these; `get_context` reads them into the prompt.
