@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { ChartQueryEditor } from "@/components/dashboards/ChartQueryEditor"
 import { DashboardChartCard } from "@/components/dashboards/DashboardChartCard"
 import { dashboardsApi } from "@/lib/dashboards/api"
 import { useDashboardData, type ChartDataState } from "@/lib/dashboards/use-dashboard-data"
@@ -249,6 +250,7 @@ function DashboardDetail({
   onDashboardChange: (dashboard: Dashboard) => void
 }) {
   const { states, refreshAll, refreshOne, anyLoading } = useDashboardData(dashboard)
+  const [editing, setEditing] = useState<string | null>(null)
 
   const removeChart = async (chartId: string) => {
     try {
@@ -275,6 +277,7 @@ function DashboardDetail({
   }
 
   const charts = [...dashboard.charts].sort((a, b) => a.position - b.position)
+  const editingChart = editing ? (charts.find((c) => c.id === editing) ?? null) : null
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -312,13 +315,31 @@ function DashboardDetail({
                 key={chart.id}
                 chart={chart}
                 state={stateFor(chart.id, chart.connectionId)}
-                onRefresh={() => refreshOne(chart.id)}
+                onViewSource={() => setEditing(chart.id)}
+                onRefresh={() => refreshOne(chart)}
                 onRemove={() => void removeChart(chart.id)}
               />
             ))}
           </div>
         )}
       </ScrollArea>
+      {editingChart ? (
+        <ChartQueryEditor
+          dashboardSlug={dashboard.slug}
+          chart={editingChart}
+          open
+          onOpenChange={(o) => {
+            if (!o) setEditing(null)
+          }}
+          onSaved={(updated) => {
+            onDashboardChange(updated)
+            // Refresh with the chart from the server response — the
+            // `dashboard` prop hasn't re-rendered with the new SQL yet.
+            const fresh = updated.charts.find((c) => c.id === editingChart.id)
+            if (fresh) refreshOne(fresh)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

@@ -58,12 +58,14 @@ export function useDashboardData(dashboard: Dashboard | null) {
     for (const chart of dashboard.charts) void runOne(chart, gen)
   }, [dashboard, runOne])
 
+  // Takes the chart object (not an id) so callers holding a fresher chart
+  // than this hook's `dashboard` prop — e.g. right after a SQL save — refresh
+  // with the updated definition instead of a stale closure.
   const refreshOne = useCallback(
-    (chartId: string) => {
-      const chart = dashboard?.charts.find((c) => c.id === chartId)
-      if (chart) void runOne(chart, generation.current)
+    (chart: DashboardChart) => {
+      void runOne(chart, generation.current)
     },
-    [dashboard, runOne],
+    [runOne],
   )
 
   // Load on dashboard open / switch. Charts added later (rare — saving happens

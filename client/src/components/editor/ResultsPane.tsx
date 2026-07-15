@@ -95,7 +95,7 @@ function RunningState() {
   )
 }
 
-function ResultTable({ result }: { result: QueryOk }) {
+export function ResultTable({ result }: { result: QueryOk }) {
   const columns = result.columns
   // Stable column keys: name plus index, since duplicates are possible.
   const colKeys = useMemo(() => columns.map((c, i) => `${c.name}::${i}`), [columns])
