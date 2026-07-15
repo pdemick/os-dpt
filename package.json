@@ -1,6 +1,6 @@
 {
   "name": "os-dpt",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Local web-based SQL editor with a built-in chat-to-SQL AI agent.",
   "type": "module",
   "packageManager": "pnpm@10.30.3",
