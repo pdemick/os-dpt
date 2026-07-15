@@ -48,6 +48,8 @@ Created on first run in the user's **current directory**. `os-dpt` treats the cw
 │   └── credentials.enc       # AES-GCM blob; key lives in OS keychain
 ├── worksheets/               # git-tracked SQL worksheets, one file per worksheet
 │   └── <slug>.sql
+├── dashboards/               # git-tracked dashboards, one JSON file per dashboard
+│   └── <slug>.json           # chart definitions (sql + connectionId + chart config) — never result data
 ├── context/                  # git-tracked agent memory (markdown), scoped per data source
 │   ├── schemas.md            # "unassigned" set — used when no connection is bound
 │   ├── conventions.md
@@ -70,6 +72,7 @@ Rule of thumb: anything sensitive lives in `.os-dpt/` and is gitignored. Anythin
 ### Security posture
 - Server binds to `127.0.0.1` only. No authentication on the API; security relies on loopback isolation (any process running as the same user can hit the API, which is consistent with how DBeaver-class tools work locally).
 - The `Use SSL` checkbox on a connection sets `ssl: { rejectUnauthorized: false }` — traffic is encrypted, but the server certificate is **not** verified. This is intentional for v1 to avoid breaking against self-signed dev/staging hosts; a future `sslmode` field can opt into verification.
+- Opening or refreshing a dashboard **auto-executes** each chart's stored SQL against its bound connection — no explicit run step, unlike worksheets. Since `dashboards/` is git-tracked, pulling someone else's dashboard runs their SQL on your database on open; the connection's access mode is the guardrail.
 
 ### Agent memory
 - The agent's "learning" is just markdown files in `context/`. The `update_context` tool appends or edits these; `get_context` reads them into the prompt.
@@ -117,7 +120,8 @@ The npm package (this repo) and a user's workspace are fully separate concerns:
 - pnpm monorepo: `client` + `server` workspaces, root scripts orchestrate both (`pnpm dev` runs Vite + Hono in parallel).
 - **Connections module live**: Hono server on `127.0.0.1:3756`, `/api/connections` (list/create/delete/test/connect/disconnect), AES-256-GCM credential vault in `.os-dpt/credentials.enc`, in-process `pg` pool registry, SIGINT/SIGTERM-driven graceful shutdown. Connections UI rebuilt with Active/Saved sections + Add dialog (Postgres-only).
 - **Worksheets module live**: CodeMirror 6 (Postgres dialect) editor with schema-aware autocomplete from `.os-dpt/schema.json`. Each tab is a `.sql` file in `worksheets/`; `Cmd+S` writes the git-tracked file, debounced autosave keeps a draft in `.os-dpt/drafts/<slug>.sql`. Open tabs / active tab / cursor restored from `.os-dpt/session.json`. Routes: `/api/worksheets`, `/api/drafts`, `/api/session`, `/api/schema`.
+- **Dashboards module live**: charts rendered by the chat agent can be saved to git-tracked `dashboards/<slug>.json` files (chart config + source SQL + connection id — result data is never persisted; it's re-fetched via the connection query route on open/refresh). Dashboards view: chart grid (the dashboard list lives in the app sidebar's collapsible submenu), per-dashboard Refresh, per-chart hover actions (refresh / remove), and an Edit button in each chart's expanded source-query footer (placeholder states get a hover pencil instead). The source-query editor dialog reuses CodeMirror + ResultTable and embeds a chat-to-SQL prompt driven by a slug-less `quick-edit` agent session — `write_sql` with no worksheet bound skips the draft write and streams the SQL back via a `sql_written` event with `worksheetSlug: null`.
 - Shared types live in `shared/`, consumed by both packages via `@shared/*`.
-- Client app shell: `SidebarProvider` + `AppSidebar` with Worksheets / Connections / Settings; Settings view is still a blank placeholder.
+- Client app shell: `SidebarProvider` + `AppSidebar`; the Chat, Worksheets, and Dashboards nav items are collapsible submenus (shared `CollapsibleNavItem`, 7-row scroll cap, pinned new-item action) listing their sessions/files, backed by shell-level providers in `App.tsx` (`WorksheetsProvider`, `DashboardsProvider`, standalone `AgentChatProvider`) so state survives view switches.
 
 Next: CLI in `cli/` that boots the server and opens the browser; root `package.json` already coordinates the monorepo. `/api/query` + results grid and the chat agent are the next features.

@@ -13,7 +13,8 @@ export const writeSqlTool: AgentTool = {
   description:
     "Stage SQL into the editor. Writes to the worksheet's draft (autosave channel), so the user " +
     "sees the SQL appear in the editor without losing their saved version until they hit Cmd+S. " +
-    "Defaults to the chat's bound worksheet. Pass the COMPLETE worksheet contents — drafts are overwrites, not patches.",
+    "Defaults to the chat's bound worksheet. Pass the COMPLETE worksheet contents — drafts are overwrites, not patches. " +
+    "When no worksheet is bound, the SQL streams straight back to the editor that launched this session.",
   input_schema: {
     type: "object",
     required: ["sql"],
@@ -40,6 +41,16 @@ export const writeSqlTool: AgentTool = {
     }
     const slug = input.worksheet_slug ?? ctx.session.meta.worksheetSlug
     if (!slug) {
+      // Slug-less quick-edit (e.g. a dashboard chart's source-query editor):
+      // no draft file to write — the sql_written event IS the delivery.
+      if (ctx.session.meta.mode === "quick-edit") {
+        return {
+          toolResult: `Staged ${input.sql.length} bytes back to the editor.`,
+          isError: false,
+          uiSummary: `Staged ${input.sql.length} chars into the editor`,
+          events: [{ type: "sql_written", worksheetSlug: null, sql: input.sql }],
+        }
+      }
       return {
         toolResult:
           "No worksheet bound. Ask the user which worksheet to write to, or set worksheet_slug.",

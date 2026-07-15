@@ -1,6 +1,7 @@
 import { MessageSquarePlusIcon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { UsageCounter } from "@/components/UsageCounter"
 import { useStickToBottom } from "@/hooks/use-stick-to-bottom"
 import { useAgent } from "@/lib/agent/context"
 
@@ -30,6 +31,10 @@ export function ChatPanel() {
       <header className="flex items-center justify-between border-b px-3 py-2">
         <div className="text-sm font-medium">Agent</div>
         <div className="flex items-center gap-1">
+          <UsageCounter
+            usage={session?.totals ?? null}
+            className="mr-1 font-mono text-[11px] text-muted-foreground"
+          />
           <Button
             size="icon-sm"
             variant="ghost"

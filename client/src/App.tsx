@@ -6,14 +6,19 @@ import { CommandPalette } from "@/components/CommandPalette"
 import { Onboarding } from "@/components/onboarding"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { api } from "@/lib/api"
+import { AgentChatProvider } from "@/lib/agent/context"
+import { DashboardsProvider } from "@/lib/dashboards/store"
+import { WorksheetsProvider } from "@/lib/worksheets/context"
 import { Chat } from "@/views/Chat"
 import { Connections } from "@/views/Connections"
+import { Dashboards } from "@/views/Dashboards"
 import { Documentation } from "@/views/Documentation"
 import { Settings } from "@/views/Settings"
 import { Worksheets } from "@/views/Worksheets"
 
 const views: Record<View, React.ComponentType> = {
   worksheets: Worksheets,
+  dashboards: Dashboards,
   connections: Connections,
   chat: Chat,
   documentation: Documentation,
@@ -62,16 +67,27 @@ export function App() {
     return <Onboarding onFinished={() => setShowOnboarding(false)} />
   }
 
+  // The worksheets, dashboards, and standalone-chat providers live at the
+  // shell so the sidebar's submenus and their views share one source of list
+  // + selection state — open worksheets and the open conversation also
+  // survive view switches. The Worksheets view nests its own worksheet-bound
+  // AgentChatProvider, which shadows the standalone one for its subtree.
   return (
-    <SidebarProvider>
-      <AppSidebar view={view} onSelect={selectView} variant="floating" />
-      <SidebarInset>
-        <div className="flex min-h-0 flex-1 flex-col">
-          <Active />
-        </div>
-      </SidebarInset>
-      <CommandPalette onNavigate={selectView} />
-    </SidebarProvider>
+    <WorksheetsProvider>
+      <DashboardsProvider>
+        <AgentChatProvider worksheetSlug={null} standalone>
+          <SidebarProvider>
+            <AppSidebar view={view} onSelect={selectView} variant="floating" />
+            <SidebarInset>
+              <div className="flex min-h-0 flex-1 flex-col">
+                <Active />
+              </div>
+            </SidebarInset>
+            <CommandPalette onNavigate={selectView} />
+          </SidebarProvider>
+        </AgentChatProvider>
+      </DashboardsProvider>
+    </WorksheetsProvider>
   )
 }
 

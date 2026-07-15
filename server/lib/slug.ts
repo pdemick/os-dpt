@@ -1,10 +1,11 @@
-export function slugify(name: string): string {
+/** `fallback` covers names that slugify to nothing (e.g. all symbols). */
+export function slugify(name: string, fallback = "worksheet"): string {
   const base = name
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-  return base || "worksheet"
+  return base || fallback
 }
 
 export function dedupeSlug(slug: string, existing: Set<string>): string {

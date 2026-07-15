@@ -125,8 +125,9 @@ function apply(items: TranscriptItem[], event: AgentEvent): TranscriptItem[] {
     case "error":
       return [...items, { id: rid(), kind: "error", message: event.message }]
     case "usage":
-      // Usage/cost is tracked separately (use-worksheet-usage); it produces
-      // no transcript row. Handled here to keep the switch exhaustive.
+      // Usage/cost produces no transcript row — it's folded into the live
+      // session totals in consume() (and the per-worksheet StatusBar refetches
+      // on its own). Handled here only to keep the switch exhaustive.
       return items
     case "done":
       return items
@@ -237,11 +238,17 @@ export function AgentChatProvider({
       try {
         for await (const event of stream) {
           setItems((prev) => apply(prev, event))
-          if (event.type === "sql_written") {
+          if (event.type === "sql_written" && event.worksheetSlug) {
             onSqlWritten?.(event.worksheetSlug, event.sql)
           }
           if (event.type === "ask_user") {
             setPendingQuestion(event.question)
+          }
+          if (event.type === "usage") {
+            // Server emits the session's cumulative totals after each LLM call;
+            // fold them into the live session so the token/cost counter updates
+            // mid-turn rather than only when streaming stops.
+            setSession((s) => (s ? { ...s, totals: event.totals } : s))
           }
         }
       } catch (err) {

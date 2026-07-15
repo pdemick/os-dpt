@@ -9,6 +9,7 @@ import { CONTEXT_DOC_NAMES, type ContextDocName } from "@shared/context.ts"
 const exec = promisify(execFile)
 
 const WORKSHEETS_DIR = "worksheets"
+const DASHBOARDS_DIR = "dashboards"
 const CONTEXT_DIR = "context"
 // Per-data-source context docs live under context/by-source/<connection-id>/;
 // docs with no connection bound stay at the context/ root (the "unassigned" set).
@@ -42,6 +43,7 @@ export function resolveWorkspace(argv: string[]): string {
 export async function initWorkspace(argv: string[] = process.argv.slice(2)): Promise<string> {
   const root = resolveWorkspace(argv)
   await fs.mkdir(path.join(root, WORKSHEETS_DIR), { recursive: true })
+  await fs.mkdir(path.join(root, DASHBOARDS_DIR), { recursive: true })
   await fs.mkdir(path.join(root, DRAFTS_DIR), { recursive: true })
   await fs.mkdir(path.join(root, CHATS_DIR), { recursive: true })
   await fs.mkdir(path.join(root, CONTEXT_DIR), { recursive: true })
@@ -112,6 +114,8 @@ export function workspacePath(...segments: string[]): string {
 export const paths = {
   worksheets: () => workspacePath(WORKSHEETS_DIR),
   worksheet: (slug: string) => workspacePath(WORKSHEETS_DIR, `${slug}.sql`),
+  dashboards: () => workspacePath(DASHBOARDS_DIR),
+  dashboard: (slug: string) => workspacePath(DASHBOARDS_DIR, `${slug}.json`),
   drafts: () => workspacePath(DRAFTS_DIR),
   draft: (slug: string) => workspacePath(DRAFTS_DIR, `${slug}.sql`),
   schemas: () => workspacePath(SCHEMAS_DIR),

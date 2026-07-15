@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react"
-import type { ReactNode } from "react"
 import { DatabaseIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
 import type { AccessMode, Connection } from "@shared/connections.ts"
@@ -103,9 +102,6 @@ export function Connections() {
     void refresh()
   }
 
-  const active = connections.filter((c) => c.active)
-  const saved = connections.filter((c) => !c.active)
-
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
@@ -132,46 +128,19 @@ export function Connections() {
       ) : connections.length === 0 ? (
         <EmptyState onAdd={openAdd} />
       ) : (
-        <div className="flex flex-col gap-6">
-          <Section title="Active" count={active.length}>
-            {active.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No active connections.
-              </p>
-            ) : (
-              active.map((conn) => (
-                <ConnectionRow
-                  key={conn.id}
-                  conn={conn}
-                  busy={busyId === conn.id}
-                  onDisconnect={() => handleDisconnect(conn.id)}
-                  onEdit={() => openEdit(conn)}
-                  onDelete={() => handleDelete(conn.id)}
-                  onAccessMode={(mode) => handleAccessMode(conn.id, mode)}
-                />
-              ))
-            )}
-          </Section>
-
-          <Section title="Saved" count={saved.length}>
-            {saved.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No saved connections.
-              </p>
-            ) : (
-              saved.map((conn) => (
-                <ConnectionRow
-                  key={conn.id}
-                  conn={conn}
-                  busy={busyId === conn.id}
-                  onConnect={() => handleConnect(conn.id)}
-                  onEdit={() => openEdit(conn)}
-                  onDelete={() => handleDelete(conn.id)}
-                  onAccessMode={(mode) => handleAccessMode(conn.id, mode)}
-                />
-              ))
-            )}
-          </Section>
+        <div className="flex flex-col gap-2">
+          {connections.map((conn) => (
+            <ConnectionRow
+              key={conn.id}
+              conn={conn}
+              busy={busyId === conn.id}
+              onConnect={() => handleConnect(conn.id)}
+              onDisconnect={() => handleDisconnect(conn.id)}
+              onEdit={() => openEdit(conn)}
+              onDelete={() => handleDelete(conn.id)}
+              onAccessMode={(mode) => handleAccessMode(conn.id, mode)}
+            />
+          ))}
         </div>
       )}
 
@@ -185,31 +154,11 @@ export function Connections() {
   )
 }
 
-function Section({
-  title,
-  count,
-  children,
-}: {
-  title: string
-  count: number
-  children: ReactNode
-}) {
-  return (
-    <section className="flex flex-col gap-2">
-      <header className="flex items-baseline gap-2">
-        <h2 className="text-sm font-medium text-foreground">{title}</h2>
-        <span className="text-xs text-muted-foreground">{count}</span>
-      </header>
-      <div className="flex flex-col gap-2">{children}</div>
-    </section>
-  )
-}
-
 type RowProps = {
   conn: Connection
   busy: boolean
-  onConnect?: () => void
-  onDisconnect?: () => void
+  onConnect: () => void
+  onDisconnect: () => void
   onEdit: () => void
   onDelete: () => void
   onAccessMode: (mode: AccessMode) => void
@@ -230,8 +179,9 @@ function ConnectionRow({
         <DatabaseIcon />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-medium text-foreground">
-          {conn.name}
+        <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <span className="truncate">{conn.name}</span>
+          <StatusBadge active={conn.active} />
         </span>
         <span className="truncate text-xs text-muted-foreground">
           {conn.driver} · {conn.user}@{conn.host}:{conn.port}/{conn.database}
@@ -278,6 +228,25 @@ function ConnectionRow({
         </Button>
       </div>
     </div>
+  )
+}
+
+function StatusBadge({ active }: { active: boolean }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-normal ${
+        active
+          ? "bg-emerald-500/15 text-emerald-500"
+          : "bg-muted text-muted-foreground"
+      }`}
+    >
+      <span
+        className={`size-1.5 rounded-full ${
+          active ? "bg-emerald-500" : "bg-muted-foreground/50"
+        }`}
+      />
+      {active ? "Active" : "Saved"}
+    </span>
   )
 }
 

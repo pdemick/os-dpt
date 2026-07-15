@@ -3,17 +3,11 @@ import { CheckIcon, Loader2Icon, SparklesIcon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { agentApi } from "@/lib/agent/api"
+import { useQuickEdit } from "@/lib/agent/use-quick-edit"
 import { formatShortcut, matchesShortcut, type Shortcut } from "@/lib/shortcuts"
 import { cn } from "@/lib/utils"
 
 const TOGGLE: Shortcut = { mod: true, key: "i" }
-
-type Status =
-  | { kind: "idle" }
-  | { kind: "running"; text: string }
-  | { kind: "done"; text: string }
-  | { kind: "error"; text: string }
 
 /**
  * Floating prompt box over the SQL editor. Drives a hidden "quick-edit" agent
@@ -35,18 +29,18 @@ export function InlineAgentBox({
 }) {
   const [open, setOpen] = useState(false)
   const [prompt, setPrompt] = useState("")
-  const [status, setStatus] = useState<Status>({ kind: "idle" })
   const inputRef = useRef<HTMLInputElement>(null)
-  // Quick-edit session per worksheet, reused across prompts so follow-ups
-  // ("now add a limit") keep their conversation context. Reuse is safe
-  // long-term: the server caps quick-edit history to the last few turns.
-  const sessionsBySlug = useRef<Map<string, { id: string; connectionId: string | null }>>(
-    new Map(),
-  )
-  const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const abortRef = useRef<AbortController | null>(null)
 
-  const streaming = status.kind === "running"
+  const { status, streaming, submit, cancel } = useQuickEdit({
+    worksheetSlug: slug,
+    connectionId,
+    contextLabel: "current worksheet contents",
+    emptyText: "(empty worksheet)",
+    doneText: "Worksheet updated",
+    onSql: (sql, worksheetSlug) => {
+      if (worksheetSlug) onSql(worksheetSlug, sql)
+    },
+  })
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -69,120 +63,16 @@ export function InlineAgentBox({
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
-  useEffect(
-    () => () => {
-      if (doneTimer.current) clearTimeout(doneTimer.current)
-      abortRef.current?.abort()
-    },
-    [],
-  )
-
-  // Abort any in-flight run and reset the status line. The dropped connection
-  // also aborts the turn server-side at its next safe point, so a canceled
-  // run's write_sql never lands in the buffer OR the on-disk draft.
-  const cancel = useCallback(() => {
-    abortRef.current?.abort()
-    abortRef.current = null
-    setStatus({ kind: "idle" })
-  }, [])
-
   const close = useCallback(() => {
     cancel()
     setOpen(false)
   }, [cancel])
 
-  const ensureSession = useCallback(async (): Promise<string> => {
-    let cached = sessionsBySlug.current.get(slug)
-    if (!cached) {
-      // Reuse this worksheet's existing quick-edit session across remounts so
-      // sessions don't pile up on disk, else create one.
-      try {
-        const all = await agentApi.listSessions()
-        const existing = all.find((s) => s.mode === "quick-edit" && s.worksheetSlug === slug)
-        if (existing) {
-          cached = { id: existing.id, connectionId: existing.connectionId }
-        }
-      } catch {
-        // list is best-effort; fall through to create
-      }
-      if (!cached) {
-        const res = await agentApi.createSession({
-          worksheetSlug: slug,
-          connectionId,
-          mode: "quick-edit",
-        })
-        cached = { id: res.meta.id, connectionId }
-      }
-      sessionsBySlug.current.set(slug, cached)
-    }
-    if (cached.connectionId !== connectionId) {
-      // Rebind to the tab's current connection; best-effort (the server
-      // rejects inactive connections — keep the old binding then).
-      try {
-        await agentApi.updateSession(cached.id, { connectionId })
-        cached.connectionId = connectionId
-      } catch {
-        // keep previous binding
-      }
-    }
-    return cached.id
-  }, [slug, connectionId])
-
-  const submit = useCallback(async () => {
-    const text = prompt.trim()
-    if (!text || streaming) return
-    if (doneTimer.current) clearTimeout(doneTimer.current)
-    const controller = new AbortController()
-    abortRef.current = controller
-    setStatus({ kind: "running", text: "thinking…" })
-    try {
-      const sessionId = await ensureSession()
-      // The quick-edit prompt promises the agent the worksheet's current
-      // contents at the end of every message — append them here.
-      const contents = buffer.trim() === "" ? "(empty worksheet)" : buffer
-      const message = `${text}\n\n--- current worksheet contents ---\n${contents}`
-      const stream = await agentApi.sendMessage(sessionId, message, controller.signal)
-      let failed: string | null = null
-      for await (const event of stream) {
-        switch (event.type) {
-          case "tool_start": {
-            const queryName =
-              event.name === "run_sql"
-                ? (event.input as { name?: unknown } | null)?.name
-                : undefined
-            setStatus({
-              kind: "running",
-              text: typeof queryName === "string" ? `run_sql — ${queryName}` : event.name,
-            })
-            break
-          }
-          case "sql_written":
-            onSql(event.worksheetSlug, event.sql)
-            break
-          case "error":
-            failed = event.message
-            break
-          default:
-            break
-        }
-      }
-      if (failed) {
-        setStatus({ kind: "error", text: failed })
-      } else {
-        setPrompt("")
-        setStatus({ kind: "done", text: "Worksheet updated" })
-        doneTimer.current = setTimeout(() => setStatus({ kind: "idle" }), 2500)
-      }
-    } catch (err) {
-      // A cancel() aborts the fetch mid-stream; that's not an error and
-      // cancel() already reset the status.
-      if (!controller.signal.aborted) {
-        setStatus({ kind: "error", text: (err as Error).message })
-      }
-    } finally {
-      if (abortRef.current === controller) abortRef.current = null
-    }
-  }, [prompt, streaming, ensureSession, buffer, onSql])
+  const run = useCallback(async () => {
+    if (streaming) return
+    const ok = await submit(prompt, buffer)
+    if (ok) setPrompt("")
+  }, [streaming, submit, prompt, buffer])
 
   if (!open) {
     return (
@@ -223,7 +113,7 @@ export function InlineAgentBox({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault()
-              void submit()
+              void run()
             }
             if (e.key === "Escape") {
               e.preventDefault()

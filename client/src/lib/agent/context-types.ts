@@ -15,7 +15,7 @@ export type TranscriptItem =
       /** Structured tool_result payload (update_context's before/after diff). Live-stream only. */
       detail?: ContextUpdateDetail
     }
-  | { id: string; kind: "sql_written"; worksheetSlug: string; length: number }
+  | { id: string; kind: "sql_written"; worksheetSlug: string | null; length: number }
   | { id: string; kind: "chart"; spec: ChartSpec }
   | { id: string; kind: "ask_user"; toolUseId: string; question: string }
   | { id: string; kind: "error"; message: string }

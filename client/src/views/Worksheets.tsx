@@ -1,10 +1,8 @@
 import { useCallback, type ReactNode } from "react"
 
-import { WorksheetsProvider } from "@/lib/worksheets/context"
 import { AgentChatProvider } from "@/lib/agent/context"
 import { useAppIntent } from "@/lib/app-intents"
 import { useWorksheets } from "@/hooks/use-worksheets"
-import { WorksheetSidebar } from "@/components/editor/WorksheetSidebar"
 import { WorksheetTabs } from "@/components/editor/WorksheetTabs"
 import { ActiveEditor } from "@/components/editor/ActiveEditor"
 import { StatusBar } from "@/components/editor/StatusBar"
@@ -37,24 +35,22 @@ function WorksheetIntents() {
   return null
 }
 
+// The WorksheetsProvider this view consumes lives in the app shell (App.tsx),
+// shared with the sidebar's Worksheets submenu — which also replaced the
+// worksheet list rail that used to render here.
 export function Worksheets() {
   return (
-    <WorksheetsProvider>
-      <WorksheetChatProvider>
-        <WorksheetIntents />
-        <div className="flex min-h-0 w-full flex-1">
-          <aside className="w-64 shrink-0 border-r border-sidebar-border">
-            <WorksheetSidebar />
-          </aside>
-          <div className="flex min-w-0 flex-1 flex-col">
-            <WorksheetTabs />
-            <EditorWithResults editor={<ActiveEditor />} />
-            <StatusBar />
-          </div>
-          <ChatPanel />
+    <WorksheetChatProvider>
+      <WorksheetIntents />
+      <div className="flex min-h-0 w-full flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <WorksheetTabs />
+          <EditorWithResults editor={<ActiveEditor />} />
+          <StatusBar />
         </div>
-        <SearchMenu />
-      </WorksheetChatProvider>
-    </WorksheetsProvider>
+        <ChatPanel />
+      </div>
+      <SearchMenu />
+    </WorksheetChatProvider>
   )
 }
