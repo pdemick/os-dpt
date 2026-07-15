@@ -219,7 +219,12 @@ function ChatNavItem(props: NavItemProps) {
           if (chat.id !== currentId) void loadSession(chat.id)
           onSelect("chat")
         },
-        onDelete: () => void deleteChat(chat.id),
+        onDelete: () => {
+          // The trash icon sits right next to the row button, so a misclick
+          // is easy — confirm like the dashboard delete does.
+          const label = chat.title ?? "Untitled chat"
+          if (window.confirm(`Delete chat “${label}”?`)) void deleteChat(chat.id)
+        },
       }))}
       newLabel="New chat"
       onNew={() => {
@@ -245,7 +250,9 @@ function WorksheetsNavItem(props: NavItemProps) {
           void openTab(ws.slug)
           onSelect("worksheets")
         },
-        onDelete: () => void deleteWorksheet(ws.slug),
+        onDelete: () => {
+          if (window.confirm(`Delete worksheet “${ws.name}”?`)) void deleteWorksheet(ws.slug)
+        },
       }))}
       newLabel="New worksheet"
       onNew={() => {
