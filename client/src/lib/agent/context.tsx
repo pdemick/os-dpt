@@ -237,7 +237,7 @@ export function AgentChatProvider({
       try {
         for await (const event of stream) {
           setItems((prev) => apply(prev, event))
-          if (event.type === "sql_written") {
+          if (event.type === "sql_written" && event.worksheetSlug) {
             onSqlWritten?.(event.worksheetSlug, event.sql)
           }
           if (event.type === "ask_user") {

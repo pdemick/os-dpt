@@ -171,7 +171,10 @@ export type AgentEvent =
       /** Structured payload for rows that show more than a summary (update_context's diff). */
       detail?: ContextUpdateDetail
     }
-  | { type: "sql_written"; worksheetSlug: string; sql: string }
+  // worksheetSlug is null for quick-edit sessions with no worksheet bound
+  // (e.g. a dashboard chart's source-query editor): the SQL streams back to
+  // the editor that launched the session instead of landing in a draft file.
+  | { type: "sql_written"; worksheetSlug: string | null; sql: string }
   | { type: "chart_rendered"; spec: ChartSpec }
   | { type: "ask_user"; toolUseId: string; question: string }
   | { type: "usage"; entry: UsageEntry; totals: UsageTotals }

@@ -111,7 +111,10 @@ async function runTurn(opts: RunOptions): Promise<void> {
   }
   const system = buildSystemPrompt(session)
   const tools = anthropicToolDefs({
-    worksheetBound: !!session.meta.worksheetSlug,
+    // Quick-edit always keeps write_sql — it's the mode's only deliverable.
+    // Without a worksheet bound the tool skips the draft write and streams
+    // the SQL back to the launching editor via the sql_written event.
+    worksheetBound: !!session.meta.worksheetSlug || session.meta.mode === "quick-edit",
     mode: session.meta.mode,
   })
 

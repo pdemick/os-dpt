@@ -379,8 +379,14 @@ export function TranscriptRow({
     case "sql_written":
       return (
         <div className="rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs text-muted-foreground">
-          → wrote {item.length} chars to <span className="font-mono">{item.worksheetSlug}</span>{" "}
-          draft
+          {item.worksheetSlug ? (
+            <>
+              → wrote {item.length} chars to <span className="font-mono">{item.worksheetSlug}</span>{" "}
+              draft
+            </>
+          ) : (
+            <>→ staged {item.length} chars into the editor</>
+          )}
         </div>
       )
     case "chart":
