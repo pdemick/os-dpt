@@ -47,6 +47,10 @@ export function SaveChartDialog({
   }, [open])
 
   const save = async () => {
+    // The Save button disables while saving, but Enter in the name input
+    // reaches here too — guard so a double-submit can't create the dashboard
+    // or add the chart twice.
+    if (saving) return
     setSaving(true)
     try {
       let slug = selected
