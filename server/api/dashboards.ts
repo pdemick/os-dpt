@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { promises as fs } from "node:fs"
 
 import { CHART_TYPES, type ChartSeries, type ChartType } from "@shared/agent.ts"
@@ -47,12 +47,22 @@ function normalize(slug: string, d: Dashboard): Dashboard {
       return [
         {
           ...parsed,
-          id: typeof c.id === "string" && c.id !== "" ? c.id : randomUUID(),
+          id: typeof c.id === "string" && c.id !== "" ? c.id : deriveChartId(slug, i, chart),
           position: typeof c.position === "number" ? c.position : i,
         },
       ]
     }),
   }
+}
+
+// Backfilled ids must be stable across reads: the client addresses PUT/DELETE
+// with the id it got from a GET, and the mutation handler re-reads the file.
+// A random id per read would 404 every mutation on a hand-edited chart, so
+// derive it from the stored content instead — the next persist() freezes it
+// into the file.
+function deriveChartId(slug: string, index: number, chart: unknown): string {
+  const hash = createHash("sha256").update(`${slug}\n${index}\n${JSON.stringify(chart)}`).digest("hex")
+  return `gen-${hash.slice(0, 12)}`
 }
 
 async function persist(dashboard: Dashboard): Promise<Dashboard> {
