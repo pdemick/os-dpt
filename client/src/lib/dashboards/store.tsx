@@ -50,9 +50,15 @@ export function DashboardsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refreshList().then((list) => {
-      setSelected((cur) =>
-        cur && list.some((d) => d.slug === cur) ? cur : (list[0]?.slug ?? null),
-      )
+      setSelected((cur) => {
+        if (cur && list.some((d) => d.slug === cur)) return cur
+        // Persist the fallback too, else localStorage keeps the stale slug
+        // and this branch re-runs on every reload.
+        const next = list[0]?.slug ?? null
+        if (next) localStorage.setItem(SELECTED_KEY, next)
+        else localStorage.removeItem(SELECTED_KEY)
+        return next
+      })
     })
   }, [refreshList])
 
