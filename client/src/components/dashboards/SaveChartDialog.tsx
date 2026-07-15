@@ -43,7 +43,12 @@ export function SaveChartDialog({
         setDashboards(list)
         setSelected(list[0]?.slug ?? NEW)
       })
-      .catch(() => setDashboards([]))
+      .catch(() => {
+        // Also drop any slug picked on a previous open — with the list empty
+        // it would be invisible yet still the save target.
+        setDashboards([])
+        setSelected(NEW)
+      })
   }, [open])
 
   const save = async () => {
