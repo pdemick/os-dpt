@@ -2,6 +2,14 @@ import pg from "pg"
 
 import type { StoredConnection } from "../storage/connections.ts"
 
+// pg's default parser turns `date` columns into JS Dates at *local* midnight,
+// which JSON-serialize as full UTC timestamps (a plain 2026-07-05 becomes
+// "2026-07-05T04:00:00.000Z" in Eastern) and can even shift a day when
+// rendered in another timezone. Dates carry no time or zone, so pass the
+// wire text ("YYYY-MM-DD") through untouched. Timestamps keep pg's default
+// Date parsing — they genuinely carry a time.
+pg.types.setTypeParser(pg.types.builtins.DATE, (value) => value)
+
 function clientConfig(conn: StoredConnection, password: string) {
   return {
     host: conn.host,

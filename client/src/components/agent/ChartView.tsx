@@ -63,6 +63,23 @@ function num(value: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
+// Dashboard charts re-fetch raw rows, so timestamp columns arrive as full
+// JSON-serialized ISO strings ("2026-07-05T04:00:00.000Z"). Render those
+// compactly on the axis: date only when the time is midnight (date_trunc'd
+// buckets), date + hh:mm otherwise. Lexical only — no timezone conversion,
+// so the label always matches what the database returned. Non-ISO values
+// (chat charts' model-authored labels) pass through untouched.
+const ISO_DATETIME_RE =
+  /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/
+
+function formatXValue(value: unknown): string {
+  if (typeof value !== "string") return String(value)
+  const m = ISO_DATETIME_RE.exec(value)
+  if (!m) return value
+  const [, date, hh, mm, ss] = m
+  return hh === "00" && mm === "00" && ss === "00" ? date : `${date} ${hh}:${mm}`
+}
+
 const axisProps = {
   stroke: "var(--muted-foreground)",
   fontSize: 10,
@@ -314,9 +331,9 @@ function renderChart(
       return (
         <LineChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey={x} {...axisProps} />
+          <XAxis dataKey={x} {...axisProps} tickFormatter={formatXValue} />
           <YAxis {...axisProps} width={36} />
-          <Tooltip {...tooltipStyle} />
+          <Tooltip {...tooltipStyle} labelFormatter={formatXValue} />
           {legend}
           {series.map((s, i) => (
             <Line
@@ -335,9 +352,9 @@ function renderChart(
       return (
         <AreaChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey={x} {...axisProps} />
+          <XAxis dataKey={x} {...axisProps} tickFormatter={formatXValue} />
           <YAxis {...axisProps} width={36} />
-          <Tooltip {...tooltipStyle} />
+          <Tooltip {...tooltipStyle} labelFormatter={formatXValue} />
           {legend}
           {series.map((s, i) => (
             <Area
@@ -402,9 +419,13 @@ function renderChart(
       return (
         <BarChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-          <XAxis dataKey={x} {...axisProps} />
+          <XAxis dataKey={x} {...axisProps} tickFormatter={formatXValue} />
           <YAxis {...axisProps} width={36} />
-          <Tooltip {...tooltipStyle} cursor={{ fill: "var(--muted)", opacity: 0.4 }} />
+          <Tooltip
+            {...tooltipStyle}
+            labelFormatter={formatXValue}
+            cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+          />
           {legend}
           {series.map((s, i) => (
             <Bar
