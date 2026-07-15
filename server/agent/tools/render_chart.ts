@@ -1,4 +1,4 @@
-import type { ChartSeries, ChartSpec, ChartType } from "@shared/agent.ts"
+import { CHART_TYPES, type ChartSeries, type ChartSpec, type ChartType } from "@shared/agent.ts"
 
 import type { AgentTool } from "./index.ts"
 
@@ -10,8 +10,6 @@ interface Input {
   data?: unknown
   sourceQuery?: string
 }
-
-const CHART_TYPES: ChartType[] = ["bar", "stacked-bar", "line", "area", "pie", "funnel"]
 const MAX_ROWS = 500
 const MAX_SERIES = 8
 

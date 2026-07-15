@@ -19,6 +19,7 @@ import schema from "./api/schema.ts"
 import history from "./api/history.ts"
 import agent from "./api/agent.ts"
 import context from "./api/context.ts"
+import dashboards from "./api/dashboards.ts"
 import { closeHistoryDb, openHistoryDb } from "./history/db.ts"
 import { startWorksheetsWatcher, stopWorksheetsWatcher } from "./history/watcher.ts"
 import { flushTracing, initTracing } from "./agent/tracing.ts"
@@ -74,6 +75,7 @@ export async function startServer(argv: string[] = process.argv.slice(2)): Promi
   app.route("/api/history", history)
   app.route("/api/agent", agent)
   app.route("/api/context", context)
+  app.route("/api/dashboards", dashboards)
 
   app.onError((err, c) => {
     if (err instanceof HTTPException) return err.getResponse()

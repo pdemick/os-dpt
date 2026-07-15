@@ -10,6 +10,16 @@ export type AgentToolName =
 /** Chart kinds the agent can render into the chat. */
 export type ChartType = "bar" | "stacked-bar" | "line" | "area" | "pie" | "funnel"
 
+/** Runtime list of every ChartType, for input validation. */
+export const CHART_TYPES: readonly ChartType[] = [
+  "bar",
+  "stacked-bar",
+  "line",
+  "area",
+  "pie",
+  "funnel",
+]
+
 /** One numeric series plotted from a column of the supplied data. */
 export interface ChartSeries {
   /** Key into each data row holding this series' numeric value. */
