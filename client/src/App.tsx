@@ -6,6 +6,7 @@ import { CommandPalette } from "@/components/CommandPalette"
 import { Onboarding } from "@/components/onboarding"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { api } from "@/lib/api"
+import { DashboardsProvider } from "@/lib/dashboards/store"
 import { Chat } from "@/views/Chat"
 import { Connections } from "@/views/Connections"
 import { Dashboards } from "@/views/Dashboards"
@@ -65,15 +66,17 @@ export function App() {
   }
 
   return (
-    <SidebarProvider>
-      <AppSidebar view={view} onSelect={selectView} variant="floating" />
-      <SidebarInset>
-        <div className="flex min-h-0 flex-1 flex-col">
-          <Active />
-        </div>
-      </SidebarInset>
-      <CommandPalette onNavigate={selectView} />
-    </SidebarProvider>
+    <DashboardsProvider>
+      <SidebarProvider>
+        <AppSidebar view={view} onSelect={selectView} variant="floating" />
+        <SidebarInset>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <Active />
+          </div>
+        </SidebarInset>
+        <CommandPalette onNavigate={selectView} />
+      </SidebarProvider>
+    </DashboardsProvider>
   )
 }
 
