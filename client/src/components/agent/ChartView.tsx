@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react"
-import { ChevronRightIcon, CodeIcon, CopyIcon, ImageDownIcon } from "lucide-react"
+import { ChevronRightIcon, CodeIcon, CopyIcon, ImageDownIcon, LayoutDashboardIcon } from "lucide-react"
 import {
   Area,
   AreaChart,
@@ -77,11 +77,14 @@ export function ChartView({
   spec,
   sourceSql,
   sourceQueryName,
+  onSave,
 }: {
   spec: ChartSpec
   /** SQL of the run_sql call that produced this chart's data, when known. */
   sourceSql?: string
   sourceQueryName?: string
+  /** When set, shows a "Save to dashboard" action next to copy-as-image. */
+  onSave?: () => void
 }) {
   const figureRef = useRef<HTMLElement>(null)
   const series = useMemo(() => normalizeSeries(spec.series), [spec.series])
@@ -128,15 +131,28 @@ export function ChartView({
             {spec.title}
           </figcaption>
         ) : null}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title="Copy as image"
-          onClick={copyAsImage}
-          className="ml-auto shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-        >
-          <ImageDownIcon />
-        </Button>
+        <div className="ml-auto flex shrink-0 items-center">
+          {onSave ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Save to dashboard"
+              onClick={onSave}
+              className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+            >
+              <LayoutDashboardIcon />
+            </Button>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Copy as image"
+            onClick={copyAsImage}
+            className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          >
+            <ImageDownIcon />
+          </Button>
+        </div>
       </div>
       <div className="h-48 w-full">
         <ResponsiveContainer width="100%" height="100%">

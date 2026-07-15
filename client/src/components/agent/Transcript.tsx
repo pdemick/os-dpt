@@ -11,7 +11,10 @@ import {
 import { Streamdown } from "streamdown"
 import { toast } from "sonner"
 
+import type { NewDashboardChart } from "@shared/dashboards"
+
 import { Button } from "@/components/ui/button"
+import { SaveChartDialog } from "@/components/dashboards/SaveChartDialog"
 import { SqlPreview } from "@/components/editor/SqlPreview"
 import { useAgent } from "@/lib/agent/context"
 import type { TranscriptItem } from "@/lib/agent/context"
@@ -244,15 +247,67 @@ function UpdateContextRow({ item }: { item: ToolItem }) {
   )
 }
 
+/**
+ * A chart in the transcript, with a "Save to dashboard" action when the
+ * chart's source query and connection are both resolvable — a saved chart
+ * re-runs that SQL on refresh, so without them there's nothing to save.
+ */
+function ChartRow({
+  item,
+  sourceSql,
+  sourceQueryName,
+  sourceConnectionId,
+}: {
+  item: Extract<TranscriptItem, { kind: "chart" }>
+  sourceSql?: string
+  sourceQueryName?: string
+  sourceConnectionId?: string
+}) {
+  const [saveOpen, setSaveOpen] = useState(false)
+  const { connectionId: chatConnectionId } = useAgent()
+  // The connection the source query ran against: an explicit run_sql input
+  // override, else the chat's bound connection (mirrors run_sql server-side).
+  const connectionId = sourceConnectionId ?? chatConnectionId
+  const canSave = !!sourceSql && !!connectionId
+
+  const chart: NewDashboardChart | null = canSave
+    ? {
+        title: item.spec.title ?? sourceQueryName ?? "Untitled chart",
+        type: item.spec.type,
+        x: item.spec.x,
+        series: item.spec.series,
+        sql: sourceSql,
+        connectionId,
+      }
+    : null
+
+  return (
+    <>
+      <ChartView
+        spec={item.spec}
+        sourceSql={sourceSql}
+        sourceQueryName={sourceQueryName}
+        onSave={chart ? () => setSaveOpen(true) : undefined}
+      />
+      {chart ? (
+        <SaveChartDialog open={saveOpen} onOpenChange={setSaveOpen} chart={chart} />
+      ) : null}
+    </>
+  )
+}
+
 export function TranscriptRow({
   item,
   sourceSql,
   sourceQueryName,
+  sourceConnectionId,
 }: {
   item: TranscriptItem
   /** For chart items: the SQL of the run_sql call that produced the data. */
   sourceSql?: string
   sourceQueryName?: string
+  /** For chart items: the source run_sql's explicit connection_id override. */
+  sourceConnectionId?: string
 }) {
   switch (item.kind) {
     case "user":
@@ -329,7 +384,14 @@ export function TranscriptRow({
         </div>
       )
     case "chart":
-      return <ChartView spec={item.spec} sourceSql={sourceSql} sourceQueryName={sourceQueryName} />
+      return (
+        <ChartRow
+          item={item}
+          sourceSql={sourceSql}
+          sourceQueryName={sourceQueryName}
+          sourceConnectionId={sourceConnectionId}
+        />
+      )
     case "ask_user":
       return (
         <div className="rounded-md border border-amber-400/40 bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
@@ -350,7 +412,8 @@ const MemoTranscriptRow = memo(
   (prev, next) =>
     prev.item === next.item &&
     prev.sourceSql === next.sourceSql &&
-    prev.sourceQueryName === next.sourceQueryName,
+    prev.sourceQueryName === next.sourceQueryName &&
+    prev.sourceConnectionId === next.sourceConnectionId,
 )
 
 /**
@@ -361,16 +424,25 @@ const MemoTranscriptRow = memo(
  * mis-attribute when the agent runs several queries before charting an
  * earlier one's results (for live streams and rehydrated chats alike).
  */
-function chartSources(items: TranscriptItem[]): Map<string, { sql: string; name?: string }> {
-  const map = new Map<string, { sql: string; name?: string }>()
-  const byName = new Map<string, { sql: string; name?: string }>()
-  let last: { sql: string; name?: string } | null = null
+interface ChartSource {
+  sql: string
+  name?: string
+  /** The run_sql input's explicit connection_id override, when present. */
+  connectionId?: string
+}
+
+function chartSources(items: TranscriptItem[]): Map<string, ChartSource> {
+  const map = new Map<string, ChartSource>()
+  const byName = new Map<string, ChartSource>()
+  let last: ChartSource | null = null
   for (const it of items) {
     if (it.kind === "tool" && it.name === "run_sql") {
-      const input = it.input as { sql?: unknown; name?: unknown } | null
+      const input = it.input as { sql?: unknown; name?: unknown; connection_id?: unknown } | null
       if (typeof input?.sql === "string" && input.sql.trim() !== "") {
         const name = typeof input.name === "string" ? input.name.trim() : ""
-        last = { sql: input.sql, name: name || undefined }
+        const connectionId =
+          typeof input.connection_id === "string" ? input.connection_id : undefined
+        last = { sql: input.sql, name: name || undefined, connectionId }
         if (name) byName.set(name, last)
       }
     } else if (it.kind === "chart") {
@@ -409,6 +481,7 @@ export function Transcript({
           item={it}
           sourceSql={sources.get(it.id)?.sql}
           sourceQueryName={sources.get(it.id)?.name}
+          sourceConnectionId={sources.get(it.id)?.connectionId}
         />
       ))}
       {streaming && !pendingQuestion ? (
