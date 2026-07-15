@@ -134,7 +134,7 @@ app.post("/", async (c) => {
   const raw = (body.name ?? "").trim()
   const name = raw === "" ? "Dashboard" : raw.length > MAX_NAME_LEN ? raw.slice(0, MAX_NAME_LEN) : raw
   const existing = new Set(await listSlugs())
-  const slug = dedupeSlug(slugify(name), existing)
+  const slug = dedupeSlug(slugify(name, "dashboard"), existing)
   const now = new Date().toISOString()
   const dashboard: Dashboard = { slug, name, createdAt: now, updatedAt: now, charts: [] }
   await writeAtomic(paths.dashboard(slug), JSON.stringify(dashboard, null, 2))
