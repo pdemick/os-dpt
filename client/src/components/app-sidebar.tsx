@@ -52,7 +52,7 @@ const navItems: {
   { id: "worksheets", title: "Worksheets", icon: FileTextIcon },
   { id: "dashboards", title: "Dashboards", icon: LayoutDashboardIcon },
   { id: "connections", title: "Connections", icon: DatabaseIcon },
-  { id: "documentation", title: "Documentation", icon: BookOpenIcon },
+  { id: "documentation", title: "Context", icon: BookOpenIcon },
   { id: "settings", title: "Settings", icon: Settings2Icon },
 ]
 
