@@ -179,8 +179,9 @@ function ConnectionRow({
         <DatabaseIcon />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-medium text-foreground">
-          {conn.name}
+        <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <span className="truncate">{conn.name}</span>
+          <StatusBadge active={conn.active} />
         </span>
         <span className="truncate text-xs text-muted-foreground">
           {conn.driver} · {conn.user}@{conn.host}:{conn.port}/{conn.database}
@@ -227,6 +228,25 @@ function ConnectionRow({
         </Button>
       </div>
     </div>
+  )
+}
+
+function StatusBadge({ active }: { active: boolean }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-normal ${
+        active
+          ? "bg-emerald-500/15 text-emerald-500"
+          : "bg-muted text-muted-foreground"
+      }`}
+    >
+      <span
+        className={`size-1.5 rounded-full ${
+          active ? "bg-emerald-500" : "bg-muted-foreground/50"
+        }`}
+      />
+      {active ? "Active" : "Saved"}
+    </span>
   )
 }
 
