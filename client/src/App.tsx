@@ -6,6 +6,7 @@ import { CommandPalette } from "@/components/CommandPalette"
 import { Onboarding } from "@/components/onboarding"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { api } from "@/lib/api"
+import { AgentChatProvider } from "@/lib/agent/context"
 import { DashboardsProvider } from "@/lib/dashboards/store"
 import { Chat } from "@/views/Chat"
 import { Connections } from "@/views/Connections"
@@ -65,17 +66,23 @@ export function App() {
     return <Onboarding onFinished={() => setShowOnboarding(false)} />
   }
 
+  // The standalone chat provider lives at the shell so the sidebar's Chat
+  // submenu and the Chat view share one session list — and the open
+  // conversation survives view switches. The Worksheets view nests its own
+  // worksheet-bound provider, which shadows this one for its subtree.
   return (
     <DashboardsProvider>
-      <SidebarProvider>
-        <AppSidebar view={view} onSelect={selectView} variant="floating" />
-        <SidebarInset>
-          <div className="flex min-h-0 flex-1 flex-col">
-            <Active />
-          </div>
-        </SidebarInset>
-        <CommandPalette onNavigate={selectView} />
-      </SidebarProvider>
+      <AgentChatProvider worksheetSlug={null} standalone>
+        <SidebarProvider>
+          <AppSidebar view={view} onSelect={selectView} variant="floating" />
+          <SidebarInset>
+            <div className="flex min-h-0 flex-1 flex-col">
+              <Active />
+            </div>
+          </SidebarInset>
+          <CommandPalette onNavigate={selectView} />
+        </SidebarProvider>
+      </AgentChatProvider>
     </DashboardsProvider>
   )
 }
