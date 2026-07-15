@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/sidebar"
 import { useAgent } from "@/lib/agent/context"
 import { useDashboards } from "@/lib/dashboards/store"
+import { useWorksheets } from "@/hooks/use-worksheets"
+import { cn } from "@/lib/utils"
 
 export type View =
   | "worksheets"
@@ -78,34 +80,29 @@ export function AppSidebar({
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            {navItems.map((item) =>
-              item.id === "dashboards" ? (
-                <DashboardsNavItem
-                  key={item.id}
-                  item={item}
-                  view={view}
-                  onSelect={onSelect}
-                />
-              ) : item.id === "chat" ? (
-                <ChatNavItem
-                  key={item.id}
-                  item={item}
-                  view={view}
-                  onSelect={onSelect}
-                />
-              ) : (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    tooltip={item.title}
-                    isActive={view === item.id}
-                    onClick={() => onSelect(item.id)}
-                  >
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ),
-            )}
+            {navItems.map((item) => {
+              switch (item.id) {
+                case "chat":
+                  return <ChatNavItem key={item.id} item={item} view={view} onSelect={onSelect} />
+                case "worksheets":
+                  return <WorksheetsNavItem key={item.id} item={item} view={view} onSelect={onSelect} />
+                case "dashboards":
+                  return <DashboardsNavItem key={item.id} item={item} view={view} onSelect={onSelect} />
+                default:
+                  return (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton
+                        tooltip={item.title}
+                        isActive={view === item.id}
+                        onClick={() => onSelect(item.id)}
+                      >
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )
+              }
+            })}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
@@ -113,20 +110,38 @@ export function AppSidebar({
   )
 }
 
-function ChatNavItem({
-  item,
-  view,
-  onSelect,
-}: {
+type NavItemProps = {
   item: (typeof navItems)[number]
   view: View
   onSelect: (v: View) => void
-}) {
-  // The app-shell provider is the standalone one, so this lists Chat-page
-  // conversations (worksheet-bound chats live in the Worksheets side panel).
-  const { chatsForActive, session, loadSession, newChat, deleteChat } = useAgent()
-  const currentId = session?.id ?? null
+}
 
+type SubItem = {
+  key: string
+  label: string
+  isActive: boolean
+  onPick: () => void
+  /** Renders a hover delete button when provided. */
+  onDelete?: () => void
+}
+
+/**
+ * Nav item with a collapsible submenu: the button navigates to the view, the
+ * chevron toggles the list, and a pinned "new" action sits below it. The list
+ * caps at ~7 rows (max-h-56 = 7 × h-7 + gaps) and scrolls beyond that.
+ */
+function CollapsibleNavItem({
+  item,
+  view,
+  onSelect,
+  subItems,
+  newLabel,
+  onNew,
+}: NavItemProps & {
+  subItems: SubItem[]
+  newLabel: string
+  onNew: () => void
+}) {
   return (
     <Collapsible defaultOpen className="group/collapsible" asChild>
       <SidebarMenuItem>
@@ -141,54 +156,41 @@ function ChatNavItem({
         <CollapsibleTrigger asChild>
           <SidebarMenuAction className="data-[state=open]:rotate-90">
             <ChevronRightIcon />
-            <span className="sr-only">Toggle chats</span>
+            <span className="sr-only">Toggle {item.title.toLowerCase()}</span>
           </SidebarMenuAction>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          {/* max-h-56 ≈ 7 rows (h-7 + gap-1); older chats scroll while the
-              New-chat action below stays pinned. */}
           <SidebarMenuSub className="max-h-56 overflow-y-auto">
-            {chatsForActive.map((chat) => (
-              <SidebarMenuSubItem key={chat.id}>
-                <SidebarMenuSubButton
-                  asChild
-                  isActive={view === "chat" && currentId === chat.id}
-                >
+            {subItems.map((sub) => (
+              <SidebarMenuSubItem key={sub.key}>
+                <SidebarMenuSubButton asChild isActive={sub.isActive}>
                   <button
                     type="button"
-                    className="w-full pr-6"
-                    onClick={() => {
-                      if (chat.id !== currentId) void loadSession(chat.id)
-                      onSelect("chat")
-                    }}
+                    className={cn("w-full", sub.onDelete && "pr-6")}
+                    onClick={sub.onPick}
                   >
-                    <span>{chat.title ?? "Untitled chat"}</span>
+                    <span>{sub.label}</span>
                   </button>
                 </SidebarMenuSubButton>
-                <button
-                  type="button"
-                  aria-label={`Delete ${chat.title ?? "chat"}`}
-                  onClick={() => void deleteChat(chat.id)}
-                  className="absolute top-1.5 right-1 flex size-4 items-center justify-center rounded text-sidebar-foreground/60 opacity-0 transition-opacity group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100 hover:text-destructive [&>svg]:size-3.5"
-                >
-                  <Trash2Icon />
-                </button>
+                {sub.onDelete ? (
+                  <button
+                    type="button"
+                    aria-label={`Delete ${sub.label}`}
+                    onClick={sub.onDelete}
+                    className="absolute top-1.5 right-1 flex size-4 items-center justify-center rounded text-sidebar-foreground/60 opacity-0 transition-opacity group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100 hover:text-destructive [&>svg]:size-3.5"
+                  >
+                    <Trash2Icon />
+                  </button>
+                ) : null}
               </SidebarMenuSubItem>
             ))}
           </SidebarMenuSub>
           <SidebarMenuSub>
             <SidebarMenuSubItem>
               <SidebarMenuSubButton asChild className="text-sidebar-foreground/70">
-                <button
-                  type="button"
-                  className="w-full"
-                  onClick={() => {
-                    void newChat()
-                    onSelect("chat")
-                  }}
-                >
+                <button type="button" className="w-full" onClick={onNew}>
                   <PlusIcon />
-                  <span>New chat</span>
+                  <span>{newLabel}</span>
                 </button>
               </SidebarMenuSubButton>
             </SidebarMenuSubItem>
@@ -199,76 +201,80 @@ function ChatNavItem({
   )
 }
 
-function DashboardsNavItem({
-  item,
-  view,
-  onSelect,
-}: {
-  item: (typeof navItems)[number]
-  view: View
-  onSelect: (v: View) => void
-}) {
-  const { metas, selected, select, create } = useDashboards()
+function ChatNavItem(props: NavItemProps) {
+  // The app-shell provider is the standalone one, so this lists Chat-page
+  // conversations (worksheet-bound chats live in the Worksheets side panel).
+  const { chatsForActive, session, loadSession, newChat, deleteChat } = useAgent()
+  const { view, onSelect } = props
+  const currentId = session?.id ?? null
 
   return (
-    <Collapsible defaultOpen className="group/collapsible" asChild>
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          tooltip={item.title}
-          isActive={view === item.id}
-          onClick={() => onSelect(item.id)}
-        >
-          <item.icon />
-          <span>{item.title}</span>
-        </SidebarMenuButton>
-        <CollapsibleTrigger asChild>
-          <SidebarMenuAction className="data-[state=open]:rotate-90">
-            <ChevronRightIcon />
-            <span className="sr-only">Toggle dashboards</span>
-          </SidebarMenuAction>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          {/* max-h-56 ≈ 7 rows (h-7 + gap-1); the list scrolls while the
-              New-dashboard action below stays pinned. */}
-          <SidebarMenuSub className="max-h-56 overflow-y-auto">
-            {metas?.map((d) => (
-              <SidebarMenuSubItem key={d.slug}>
-                <SidebarMenuSubButton
-                  asChild
-                  isActive={view === "dashboards" && selected === d.slug}
-                >
-                  <button
-                    type="button"
-                    className="w-full"
-                    onClick={() => {
-                      select(d.slug)
-                      onSelect("dashboards")
-                    }}
-                  >
-                    <span>{d.name}</span>
-                  </button>
-                </SidebarMenuSubButton>
-              </SidebarMenuSubItem>
-            ))}
-          </SidebarMenuSub>
-          <SidebarMenuSub>
-            <SidebarMenuSubItem>
-              <SidebarMenuSubButton asChild className="text-sidebar-foreground/70">
-                <button
-                  type="button"
-                  className="w-full"
-                  onClick={() => {
-                    void create().then(() => onSelect("dashboards"))
-                  }}
-                >
-                  <PlusIcon />
-                  <span>New dashboard</span>
-                </button>
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
-          </SidebarMenuSub>
-        </CollapsibleContent>
-      </SidebarMenuItem>
-    </Collapsible>
+    <CollapsibleNavItem
+      {...props}
+      subItems={chatsForActive.map((chat) => ({
+        key: chat.id,
+        label: chat.title ?? "Untitled chat",
+        isActive: view === "chat" && currentId === chat.id,
+        onPick: () => {
+          if (chat.id !== currentId) void loadSession(chat.id)
+          onSelect("chat")
+        },
+        onDelete: () => void deleteChat(chat.id),
+      }))}
+      newLabel="New chat"
+      onNew={() => {
+        void newChat()
+        onSelect("chat")
+      }}
+    />
+  )
+}
+
+function WorksheetsNavItem(props: NavItemProps) {
+  const { list, session, openTab, createWorksheet, deleteWorksheet } = useWorksheets()
+  const { view, onSelect } = props
+
+  return (
+    <CollapsibleNavItem
+      {...props}
+      subItems={list.map((ws) => ({
+        key: ws.slug,
+        label: ws.name,
+        isActive: view === "worksheets" && session.activeSlug === ws.slug,
+        onPick: () => {
+          void openTab(ws.slug)
+          onSelect("worksheets")
+        },
+        onDelete: () => void deleteWorksheet(ws.slug),
+      }))}
+      newLabel="New worksheet"
+      onNew={() => {
+        void createWorksheet().then(() => onSelect("worksheets"))
+      }}
+    />
+  )
+}
+
+function DashboardsNavItem(props: NavItemProps) {
+  const { metas, selected, select, create } = useDashboards()
+  const { view, onSelect } = props
+
+  return (
+    <CollapsibleNavItem
+      {...props}
+      subItems={(metas ?? []).map((d) => ({
+        key: d.slug,
+        label: d.name,
+        isActive: view === "dashboards" && selected === d.slug,
+        onPick: () => {
+          select(d.slug)
+          onSelect("dashboards")
+        },
+      }))}
+      newLabel="New dashboard"
+      onNew={() => {
+        void create().then(() => onSelect("dashboards"))
+      }}
+    />
   )
 }
