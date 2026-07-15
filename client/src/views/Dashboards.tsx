@@ -121,6 +121,10 @@ export function Dashboards() {
         <DashboardDetail
           dashboard={dashboard}
           connectionIds={new Set(connections.map((c) => c.id))}
+          onDashboardChange={(d) => {
+            setDashboard(d)
+            void refreshList()
+          }}
         />
       ) : (
         <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
@@ -237,12 +241,23 @@ function DashboardListRail({
 function DashboardDetail({
   dashboard,
   connectionIds,
+  onDashboardChange,
 }: {
   dashboard: Dashboard
   /** Ids of connections that still exist, to flag charts pointing at deleted ones. */
   connectionIds: Set<string>
+  onDashboardChange: (dashboard: Dashboard) => void
 }) {
-  const { states, refreshAll, anyLoading } = useDashboardData(dashboard)
+  const { states, refreshAll, refreshOne, anyLoading } = useDashboardData(dashboard)
+
+  const removeChart = async (chartId: string) => {
+    try {
+      onDashboardChange(await dashboardsApi.removeChart(dashboard.slug, chartId))
+      toast.success("Chart removed")
+    } catch (err) {
+      toast.error("Couldn't remove chart", { description: (err as Error).message })
+    }
+  }
 
   // A chart whose connection was deleted gets the same 409 as a disconnected
   // one from the query route — distinguish them here via the connections list.
@@ -297,6 +312,8 @@ function DashboardDetail({
                 key={chart.id}
                 chart={chart}
                 state={stateFor(chart.id, chart.connectionId)}
+                onRefresh={() => refreshOne(chart.id)}
+                onRemove={() => void removeChart(chart.id)}
               />
             ))}
           </div>

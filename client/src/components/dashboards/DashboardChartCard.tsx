@@ -1,12 +1,64 @@
-import { DatabaseZapIcon, Loader2Icon, TriangleAlertIcon, UnplugIcon } from "lucide-react"
+import {
+  DatabaseZapIcon,
+  Loader2Icon,
+  RefreshCwIcon,
+  SquareCodeIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+  UnplugIcon,
+} from "lucide-react"
 
 import type { ChartSpec } from "@shared/agent"
 import type { DashboardChart } from "@shared/dashboards"
 
 import { ChartView } from "@/components/agent/ChartView"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import type { ChartDataState } from "@/lib/dashboards/use-dashboard-data"
 
 export function DashboardChartCard({
+  chart,
+  state,
+  onViewSource,
+  onRefresh,
+  onRemove,
+}: {
+  chart: DashboardChart
+  state: ChartDataState | undefined
+  /** Opens the source-query editor. Absent until the editor is wired up. */
+  onViewSource?: () => void
+  onRefresh: () => void
+  onRemove: () => void
+}) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div className="min-w-0">
+          <CardBody chart={chart} state={state} />
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        {onViewSource ? (
+          <ContextMenuItem onSelect={onViewSource}>
+            <SquareCodeIcon /> View source query
+          </ContextMenuItem>
+        ) : null}
+        <ContextMenuItem onSelect={onRefresh} disabled={state?.kind === "loading"}>
+          <RefreshCwIcon /> Refresh
+        </ContextMenuItem>
+        <ContextMenuItem variant="destructive" onSelect={onRemove}>
+          <Trash2Icon /> Remove from dashboard
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+function CardBody({
   chart,
   state,
 }: {
