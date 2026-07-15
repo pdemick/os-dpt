@@ -2,6 +2,7 @@ import { useCallback } from "react"
 
 import { Composer } from "@/components/agent/Composer"
 import { Transcript } from "@/components/agent/Transcript"
+import { UsageCounter } from "@/components/UsageCounter"
 import { useStickToBottom } from "@/hooks/use-stick-to-bottom"
 import { useAgent } from "@/lib/agent/context"
 import { useAppIntent } from "@/lib/app-intents"
@@ -36,6 +37,15 @@ function Conversation() {
 
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-background">
+      <header className="flex h-10 shrink-0 items-center justify-between gap-2 border-b px-6">
+        <span className="truncate text-sm font-medium">
+          {session?.title ?? "New chat"}
+        </span>
+        <UsageCounter
+          usage={session?.totals ?? null}
+          className="shrink-0 font-mono text-[11px] text-muted-foreground"
+        />
+      </header>
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-6 py-6">
           <Transcript
