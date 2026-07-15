@@ -1,31 +1,57 @@
-# os-dpt
+# Data Profile Tool
 
-A local, web-based SQL editor with a built-in chat-to-SQL agent — where the
-agent's knowledge lives as **plain markdown files in your repo** that you can
-read, diff, and revert.
+Data Profile Tool is a fully local, file-based SQL editor with powerful
+chat-to-SQL functionality, charting, and a context layer.
 
-You run it in your own working directory and use it from `localhost`. Your
-queries and the agent's evolving understanding of your data are ordinary files,
-version-controlled by git. Nothing about your data leaves your machine except
-what you send to your LLM provider when you ask the agent a question.
+## Features
 
-## Why
+### SQL editor
 
-Good data agents are mostly about **context** — schema, business meaning, past
-queries, and hard-won corrections. Most tools keep that context in a vendor's
-database where you can't see it. os-dpt keeps every layer as a file you own:
+Write a query against a connection and run it; results appear inline.
 
-- **Live schema** — introspected from the database on demand.
-- **Curated docs** — `context/schemas.md`, `context/conventions.md`,
-  `context/feedback.md`: human- and agent-editable markdown, scoped per data
-  source.
-- **Memory** — when the agent learns something durable (a clarified column, a
-  data-quality quirk, a correction), it writes it back to those files. Because
-  they're git-tracked, you see a diff for every change the agent makes to its
-  own understanding, and you can revert it.
+![A SQL worksheet with a query joining order_items, products and orders](.github/readme/editor.png)
 
-The result is an agent whose "learning" is transparent and yours, not a black
-box.
+![The results grid showing eight rows of product revenue, with row numbers and column headers](.github/readme/results.png)
+
+### Chat-to-SQL agent
+
+Ask a question in plain English. The agent reads your live schema, writes and
+runs SQL, and charts the answer — with every tool call shown in the transcript,
+so you see exactly what it did rather than trusting a black box.
+
+![The chat agent answering "which product categories bring in the most revenue?" — showing its get_context, get_schema and run_sql tool calls, then a rendered bar chart](.github/readme/chat-agent.png)
+
+### Transparent, versioned memory
+
+The agent's knowledge isn't hidden in a vendor database — it's git-tracked
+markdown in your repo. Correct it once and it writes the rule to its notes, then
+applies it on its own from then on:
+
+![The agent confirming it saved a rule to conventions.md via its update_context tool, so it applies the exclusion automatically in future queries](.github/readme/agent-memory.png)
+
+Those notes are plain markdown you read and edit in the **Documentation** view —
+`Schemas`, `Conventions`, and `Feedback` per data source. Every change, yours or
+the agent's, is a reviewable diff:
+
+![The Documentation view showing a Conventions doc for a connection, rendered from a git-tracked markdown file](.github/readme/documentation.png)
+
+### Everything is a file
+
+Worksheets are `.sql` and context is `.md`, so version history is built in — diff
+any two versions of a query and restore an earlier one.
+
+![The worksheet history viewer diffing two versions of a query side by side, with a "Restore this version" button](.github/readme/history.png)
+
+### Local-first & private
+
+The server binds to `127.0.0.1` and credentials are encrypted in your OS
+keychain. Nothing about your data leaves your machine except what you send to
+your LLM provider.
+
+### Read-only by default
+
+Connections open read-only; you opt into writes per connection, so the agent
+can't change your data unless you let it.
 
 ## Quick start
 
@@ -82,7 +108,7 @@ worksheet/context history works out of the box.
 
 ## How the agent works
 
-A small, focused tool loop (see `server/agent/`):
+Under the hood, the agent runs a small, focused tool loop (see `server/agent/`):
 
 - `get_schema` — introspect live tables/columns.
 - `get_context` / `update_context` — read and write the markdown knowledge files.
@@ -90,6 +116,11 @@ A small, focused tool loop (see `server/agent/`):
 - `write_sql` — stage SQL into a worksheet for you to review and save.
 - `render_chart` — draw a chart inline from query results.
 - `ask_user_question` — pause and ask rather than guess.
+
+Because worksheets and context are just files, the collaboration is durable:
+the agent rewrites a worksheet in place as you iterate, `git` keeps the full
+history of both your queries and the agent's notes, and the in-app history
+viewer is a thin wrapper over `git log` / `git diff` for a given file.
 
 ## Security
 
